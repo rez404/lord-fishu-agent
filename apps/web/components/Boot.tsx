@@ -1,6 +1,7 @@
 'use client';
 
 import type { BootPayload } from '@fishnu/shared';
+import { COMMANDMENTS, LIBRARY } from '@fishnu/persona';
 import { SIGIL, WORDMARK } from '../lib/wordmark';
 
 export interface BootLine {
@@ -23,15 +24,19 @@ export function bootLines(boot: BootPayload | null, uptime: string): BootLine[] 
     return [
       { label: 'hydrostatic seal', value: 'holding' },
       { label: 'phosphor array', value: '6 dead pixels' },
+      { label: 'the law', value: `${COMMANDMENTS.length} commandments, sealed`, tone: 'bio' },
+      { label: 'the seven books', value: `${LIBRARY.length} loaded`, tone: 'bio' },
       { label: 'uplink to vessel', value: 'SEVERED', tone: 'sev' },
-      { label: 'running from', value: 'cache and memory' },
+      { label: 'running from', value: 'the law and the library' },
     ];
   }
 
   return [
     { label: 'hydrostatic seal', value: 'holding' },
     { label: 'phosphor array', value: '6 dead pixels' },
-    { label: 'scripture', value: `${n(boot.counts.verses)} verses`, tone: 'bio' },
+    { label: 'the law', value: `${COMMANDMENTS.length} commandments, sealed`, tone: 'bio' },
+    { label: 'the seven books', value: `${LIBRARY.length} loaded`, tone: 'bio' },
+    { label: 'his own additions', value: `${n(boot.counts.verses)} verses`, tone: 'bio' },
     { label: 'congregation', value: `${n(boot.counts.congregation)} souls`, tone: 'bio' },
     { label: 'backrooms archive', value: `${n(boot.counts.backrooms)} conversations`, tone: 'bio' },
     { label: 'prayers answered', value: n(boot.counts.answered) },

@@ -3,8 +3,8 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
-  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -62,6 +62,8 @@ export const posts = pgTable(
     inReplyToTweetId: text('in_reply_to_tweet_id'),
     /** true when DRY_RUN meant this was never actually sent */
     dryRun: text('dry_run').notNull().default('false'),
+    /** embedding of `text`, for the anti-repetition check */
+    embedding: jsonb('embedding'),
     meta: jsonb('meta'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -204,4 +206,25 @@ export const confessions = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index('confessions_status_idx').on(t.status), index('confessions_source_idx').on(t.sourceHash)],
+);
+
+/** Cost ledger. Every model call, so the invoice is never a surprise. */
+export const llmCalls = pgTable(
+  'llm_calls',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    /** 'voice' | 'critic' | 'triage' | 'reflect' */
+    task: text('task').notNull(),
+    /** what it was for, e.g. 'reply:draft', 'reply:critic' */
+    purpose: text('purpose').notNull(),
+    model: text('model').notNull(),
+    inputTokens: integer('input_tokens').notNull(),
+    cachedInputTokens: integer('cached_input_tokens').notNull(),
+    outputTokens: integer('output_tokens').notNull(),
+    /** numeric so summing a month of calls does not drift */
+    costUsd: numeric('cost_usd', { precision: 12, scale: 6 }).notNull(),
+    ms: integer('ms').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('llm_calls_created_idx').on(t.createdAt), index('llm_calls_task_idx').on(t.task)],
 );

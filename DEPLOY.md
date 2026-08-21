@@ -79,6 +79,15 @@ docker compose -f deploy/docker-compose.yml exec agent pnpm --filter @fishnu/age
 
 # quota ledger, live
 curl -s https://api.lordfishnu.xyz/health | jq .quota
+
+# what the models have cost, this month
+docker compose -f deploy/docker-compose.yml exec postgres psql -U fishnu -d fishnu -c \
+  "select task, model, count(*), round(sum(cost_usd),2) usd,
+          round(100.0*sum(cached_input_tokens)/nullif(sum(input_tokens),0)) cache_pct
+     from llm_calls where created_at > now() - interval '30 days'
+    group by 1,2 order by 4 desc;"
+# cache_pct near zero on the voice row means the frozen prompt is being invalidated
+# and the bill is several times what it should be.
 ```
 
 ### Backups
@@ -130,6 +139,7 @@ matches wildcard entries by hostname suffix.
 
 ## 3. Checklist before he is allowed to speak
 
+- [ ] `OPENAI_API_KEY` set, and `docker compose -f deploy/docker-compose.yml run --rm agent pnpm --filter @fishnu/agent doctor` passes — model ids are the one thing that cannot be verified without a key
 - [ ] `DRY_RUN=true` in `deploy/.env` — he decides and logs, but posts nothing
 - [ ] Watch `action_log` and the `posts` table for a few days; read what he *would* have said
 - [ ] `QUOTA_MONTHLY_READS` / `QUOTA_MONTHLY_WRITES` verified against the real X plan

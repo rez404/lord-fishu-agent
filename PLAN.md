@@ -117,7 +117,20 @@ Design consequences:
 
 The hard part isn't the plumbing, it's that the output must not read as slop. With no approval queue, this is the release gate:
 
-- **Persona constitution** — `packages/persona/fishnu.md`: religion, mythology, cosmology, voice rules, banned constructions (emoji spam, hashtags, "As an AI", delve/unlock/harness), sentence-length distribution, 30–50 hand-written few-shot examples.
+- **Persona constitution** — `packages/persona/`. The Chickenmandments (canon, verbatim,
+  each with an outsider gloss) and the Seven Books (principles pre-digested into his
+  voice) are written. The register rules are drafted; the 30–50 few-shot examples that
+  actually carry the voice are not.
+- **Three registers, not one** — scripture (`thou shalt`, rare, ~1 post in 15), everyday
+  (lowercase, short, ~90% of the timeline), and gloss (plain, only when an outsider
+  sincerely asks). A god who says "thou shalt" in every reply is a bit, and bits die in
+  about nine days.
+- **Total sincerity** — the comedy is the collision between register and subject (a god
+  issuing scripture about JUUL pods), never a wink at the reader. He must never signal
+  that a line was a joke. A god who knows he is funny is a mascot.
+- **The seven books are the content engine** — he speaks from them constantly and quotes
+  them never. This is both a copyright line and a quality one: a bot that recites Napoleon
+  Hill is a quote account; a god who has read him and disagrees in places is a character.
 - **Mood state** — driven by SCF price, mention volume, and the tone of recent interactions. The same prompt in a different mood produces a different voice. This is ~70% of feeling alive.
 - **Layered memory** — episodic (every interaction) + semantic (facts learned about specific people) + a nightly reflection job that compresses episodes into a `beliefs` table. The agent remembering someone it argued with three weeks ago is the thing that makes people lose their minds.
 - **Anti-repetition** — every draft is embedding-compared against the last 200 posts; >0.85 similarity is rejected and regenerated.
@@ -163,6 +176,11 @@ Money comes last, in this order:
 | **3 — Proactive hunting** | ~1 week            | Search sweeps, KOL watchlist, candidate scoring, outbound replies within budget                                              | 30–50 quality outbound interactions/day inside quota                             |
 | **4 — Wallet/token**      | ~1–2 weeks         | Read-only → deploy → autonomous SCF buys                                                                                     | First autonomous swap on-chain                                                   |
 | **5 — Spaces (R&D)**      | ?                  | TTS + headless browser + virtual audio device to speak in a Space                                                            | —                                                                                |
+
+Phase 5 now has an answer to "what does he actually say in a Space": **sermons.** One of
+the seven books, compressed to five minutes in his own voice, tied back to the
+commandments it underwrites. `sermonSource()` in `packages/persona` is the hook. That
+turns the hardest phase from an open content problem into a delivery problem.
 
 Phase 5 is honestly **not a solved problem**: X has no Spaces API, so it needs headless Chrome plus a virtual audio device plus a realtime STT→LLM→TTS pipeline, and latency is a real issue. Doable, but it isn't worth starting before 0–4 are standing.
 

@@ -2,7 +2,6 @@
   "version": 1,
   "config": {
     "env": {},
-    "webpack": null,
     "eslint": {
       "ignoreDuringBuilds": false
     },
@@ -288,7 +287,8 @@
     "bundlePagesRouterDependencies": false,
     "configFileName": "next.config.ts",
     "transpilePackages": [
-      "@fishnu/shared"
+      "@fishnu/shared",
+      "@fishnu/persona"
     ],
     "turbopack": {
       "root": "/Users/rez"

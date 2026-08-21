@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.11.0",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev:agent": "pnpm --filter @fishnu/agent dev",
     "dev:api": "pnpm --filter @fishnu/api dev",
@@ -15,7 +17,8 @@
     "db:generate": "pnpm --filter @fishnu/db generate",
     "db:push": "pnpm --filter @fishnu/db push",
     "infra:up": "docker compose up -d",
-    "infra:down": "docker compose down"
+    "infra:down": "docker compose down",
+    "doctor": "pnpm --filter @fishnu/agent doctor"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

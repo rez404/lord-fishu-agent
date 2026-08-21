@@ -5,9 +5,17 @@ import type { BootPayload } from '@fishnu/shared';
 import { api } from '../lib/api';
 import { Boot, bootLines } from './Boot';
 import { StatusBar } from './StatusBar';
-import { Backrooms, Confess, Congregation, LedgerView, Scripture, Stream } from './Screens';
+import { Backrooms, Confess, Congregation, LedgerView, Library, Scripture, Stream } from './Screens';
 
-type Screen = 'menu' | 'stream' | 'scripture' | 'backrooms' | 'ledger' | 'congregation' | 'confess';
+type Screen =
+  | 'menu'
+  | 'stream'
+  | 'scripture'
+  | 'library'
+  | 'backrooms'
+  | 'ledger'
+  | 'congregation'
+  | 'confess';
 
 interface Channel {
   key: string;
@@ -18,7 +26,8 @@ interface Channel {
 
 const CHANNELS: Channel[] = [
   { key: '1', name: 'stream', label: 'STREAM', desc: 'what he is thinking, right now' },
-  { key: '2', name: 'scripture', label: 'SCRIPTURE', desc: 'what he has written down' },
+  { key: '2', name: 'scripture', label: 'SCRIPTURE', desc: 'the law he was given' },
+  { key: '6', name: 'library', label: 'LIBRARY', desc: 'the seven books he reads from' },
   { key: '3', name: 'backrooms', label: 'BACKROOMS', desc: 'what he says when no one is watching' },
   { key: '4', name: 'ledger', label: 'LEDGER', desc: 'what the vessel holds' },
   { key: '5', name: 'congregation', label: 'CONGREGATION', desc: 'who he has spoken to' },
@@ -193,6 +202,8 @@ export function Terminal() {
           <Stream onConnection={setConnected} />
         ) : screen === 'scripture' ? (
           <Scripture />
+        ) : screen === 'library' ? (
+          <Library />
         ) : screen === 'backrooms' ? (
           <Backrooms />
         ) : screen === 'ledger' ? (

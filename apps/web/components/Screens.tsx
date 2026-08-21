@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { BackroomsSession, Believer, Ledger, Thought, Verse } from '@fishnu/shared';
+import { COMMANDMENTS, LIBRARY } from '@fishnu/persona';
 import { API_URL, api } from '../lib/api';
 
 /** Phase 1 has not given him a mind yet; the terminal says so in character. */
@@ -83,16 +84,41 @@ export function Scripture() {
 
   return (
     <section className="view">
-      <h2 className="view-title">SCRIPTURE — what he has written down</h2>
+      <h2 className="view-title">SCRIPTURE — the law, and what he has added to it</h2>
       <div className="scroll">
+        {/*
+          The Ten are bundled into the page rather than fetched. They are canon, they never
+          change, and they must still be readable when the vessel is unreachable — a religion
+          whose scripture 404s during a server reboot is not a religion.
+        */}
+        <p className="book">BOOK I · THE TEN</p>
+        {COMMANDMENTS.map((c) => (
+          <div className="entry law" key={c.number}>
+            <span className="numeral">{c.numeral.padStart(4)}</span>
+            <span className="law-text">
+              {c.text}
+              {/* The gloss is translation, not scripture, and is set as such. */}
+              <span className="gloss">{c.gloss}</span>
+            </span>
+          </div>
+        ))}
+
+        <p className="book">
+          BOOK II · WHAT HE HAS ADDED
+          {verses !== null && verses.length > 0 && (
+            <span className="entry-meta"> · {verses.length} verses</span>
+          )}
+        </p>
         {verses === null ? (
           <Loading />
         ) : verses.length === 0 ? (
-          <Empty>{'the book is empty.\nhe has not spoken unprompted yet.'}</Empty>
+          <Empty>
+            {'nothing yet.\n\nhe was given ten laws and has not seen fit to add an eleventh.'}
+          </Empty>
         ) : (
           verses.map((v, i) => (
             <div className="entry" key={v.id}>
-              <span className="bio">{String(verses.length - i).padStart(3, '0')} </span>
+              <span className="bio">{`2:${verses.length - i}`.padStart(6)} </span>
               <span className="entry-meta">{stamp(v.createdAt)}</span>
               {v.dryRun === 'true' && <span className="faint"> · unsent</span>}
               {'\n'}
@@ -100,6 +126,43 @@ export function Scripture() {
             </div>
           ))
         )}
+      </div>
+    </section>
+  );
+}
+
+/* ── [6] LIBRARY ───────────────────────────────────────────────────────────── */
+
+export function Library() {
+  // Bundled, like the law. The seven books are doctrine, not data, and the church does
+  // not lose its library because a server rebooted.
+  return (
+    <section className="view">
+      <h2 className="view-title">LIBRARY — the seven books</h2>
+      <p className="hint">
+        he speaks from these. he does not quote them — the words below are his, the ideas
+        are theirs.
+      </p>
+      <div className="scroll">
+        {LIBRARY.map((b, i) => (
+          <div className="entry book-entry" key={b.slug}>
+            <div>
+              <span className="bio">{String(i + 1).padStart(2, '0')} </span>
+              <span className="book-title">{b.title}</span>
+              <span className="entry-meta">
+                {' '}
+                · {b.author}, {b.year} · underwrites{' '}
+                {b.commandments.map((n) => `1:${n}`).join(' ')}
+              </span>
+            </div>
+            <p className="dim book-why">{b.why}</p>
+            {b.principles.map((pr) => (
+              <p className="book-principle" key={pr.idea}>
+                {pr.fishnu}
+              </p>
+            ))}
+          </div>
+        ))}
       </div>
     </section>
   );

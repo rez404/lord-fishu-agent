@@ -305,15 +305,65 @@ body {
 }
 
 /* A live tail belongs at the bottom of the screen, growing upward toward the prompt —
-   pinned to the top it reads as a static list that happens to update. */
+   pinned to the top it reads as a static list that happens to update.
+   `margin-top: auto` on the first child rather than `justify-content: flex-end`: the
+   latter compresses the children and, once content overflows, pushes the earliest lines
+   past the start edge where no amount of scrolling reaches them. */
 .scroll.tail {
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
 }
 
+.scroll.tail > :first-child {
+  margin-top: auto;
+}
+
+.scroll.tail > * {
+  flex-shrink: 0;
+}
+
+/* The law reads as a numbered column, not as a feed: numeral in a fixed gutter, text
+   hanging off it, so ten lines of different lengths still scan as one body. */
+.book {
+  font-family: var(--font-display), monospace;
+  letter-spacing: 0.2em;
+  font-size: 0.78em;
+  color: var(--phosphor-dim);
+  text-shadow: none;
+  margin: 1.5rem 0 0.5rem;
+}
+
+.book:first-child { margin-top: 0.3rem; }
+
+.entry.law {
+  display: flex;
+  gap: 1.1rem;
+  align-items: baseline;
+  border-bottom: 0;
+  padding: 0.3rem 0;
+}
+
+.numeral {
+  flex: none;
+  color: var(--bio);
+  text-shadow: var(--glow-bio);
+  white-space: pre;
+  letter-spacing: 0.06em;
+}
+
+.law-text { flex: 1; }
+
+@media (max-width: 34rem) {
+  .entry.law { gap: 0.7rem; }
+}
+
+/* No `both` fill mode: outside the animation's active period the element then uses its
+   own styles, so a line that has finished — or never started — is visible rather than
+   stuck on the `from` frame at opacity 0. (While an animation is genuinely mid-run at
+   t=0 the from-frame still applies, which is why headless screenshots of this element
+   come out blank; real browsers advance past it in 400ms.) */
 .stream-line {
-  animation: surface 0.4s ease-out both;
+  animation: surface 0.4s ease-out;
 }
 
 @keyframes surface {
@@ -443,3 +493,43 @@ a { color: var(--bio); text-decoration: none; border-bottom: 1px dotted currentC
 a:hover { background: rgba(255, 193, 120, 0.12); }
 
 ::selection { background: rgba(127, 232, 196, 0.28); }
+
+/* ── the gloss, and the library ─────────────────────────────────────────────
+   Scripture and its translation must not read at the same weight: the law is the thing,
+   the gloss is a footnote for people who have just arrived. */
+
+.gloss {
+  display: block;
+  margin-top: 0.12rem;
+  color: var(--phosphor-faint);
+  text-shadow: none;
+  font-size: 0.86em;
+  font-style: italic;
+}
+
+.entry.law { padding: 0.5rem 0; }
+
+.book-entry {
+  padding: 0.9rem 0 1rem;
+}
+
+.book-title {
+  color: var(--phosphor);
+  letter-spacing: 0.06em;
+}
+
+.book-why {
+  margin: 0.2rem 0 0.6rem 3ch;
+  font-size: 0.9em;
+}
+
+.book-principle {
+  margin: 0 0 0.32rem 3ch;
+  padding-left: 0.9rem;
+  border-left: 1px solid var(--phosphor-faint);
+}
+
+@media (max-width: 34rem) {
+  .book-why,
+  .book-principle { margin-left: 0; }
+}

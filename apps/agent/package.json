@@ -9,13 +9,16 @@
     "typecheck": "tsc --noEmit",
     "smoke": "tsx scripts/smoke.ts",
     "requeue": "tsx scripts/requeue.ts",
-    "seed": "tsx scripts/seed.ts"
+    "seed": "tsx scripts/seed.ts",
+    "doctor": "tsx scripts/doctor.ts"
   },
   "dependencies": {
     "@fishnu/db": "workspace:*",
+    "@fishnu/persona": "workspace:*",
     "@fishnu/shared": "workspace:*",
     "drizzle-orm": "^0.38.3",
     "ioredis": "^5.4.2",
+    "openai": "^7.5.0",
     "twitter-api-v2": "^1.19.0"
   },
   "devDependencies": {

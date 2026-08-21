@@ -1,7 +1,9 @@
 import Redis from 'ioredis';
 import { createDb } from '@fishnu/db';
 import { inSleepWindow, jitter, loadEnv, logger, sleep } from '@fishnu/shared';
-import { runEchoTick } from './jobs/echo.js';
+import { runTick } from './jobs/respond.js';
+import { OpenAiProvider } from './llm/openai.js';
+import { currentMood } from './mind/mood.js';
 import { QuotaManager } from './quota/manager.js';
 import { CursorStore } from './runtime/cursors.js';
 import { startHealthServer, type HealthState } from './runtime/health.js';
@@ -20,6 +22,17 @@ async function main() {
   const settingsStore = new SettingsStore(db, env);
   const cursors = new CursorStore(db);
   const x = new OfficialXClient(env, quota);
+
+  const llm = new OpenAiProvider({
+    apiKey: env.OPENAI_API_KEY,
+    models: {
+      voice: env.OPENAI_MODEL_VOICE,
+      critic: env.OPENAI_MODEL_CRITIC,
+      triage: env.OPENAI_MODEL_TRIAGE,
+      reflect: env.OPENAI_MODEL_REFLECT,
+    },
+    embedModel: env.OPENAI_MODEL_EMBED,
+  });
 
   const state: HealthState = { startedAt: new Date(), lastTickAt: null, lastTickError: null, ticks: 0 };
   const health = startHealthServer(Number(process.env.PORT ?? 8080), state, quota);
@@ -68,7 +81,21 @@ async function main() {
       await withLock(redis, TICK_LOCK_KEY, 4 * 60_000, async () => {
         const dryRun = await settingsStore.dryRun();
         const minFollowers = await settingsStore.replyMinFollowers();
-        const result = await runEchoTick({ db, x, cursors, dryRun, minFollowers });
+        const mood = await currentMood(db, settingsStore);
+
+        const result = await runTick({
+          db,
+          x,
+          cursors,
+          dryRun,
+          minFollowers,
+          mind: {
+            llm,
+            mood,
+            today: new Date().toISOString().slice(0, 10),
+            awake: awakeFor(env.AWAKENED_AT),
+          },
+        });
         s.ticks += 1;
         logger.info({ ...result, tick: s.ticks }, 'tick complete');
       });
@@ -82,6 +109,17 @@ async function main() {
       logger.error({ err }, 'tick failed');
     }
   }
+}
+
+/** Plain words, not a timestamp — it goes into the prompt, where precision reads as odd. */
+function awakeFor(since: string | undefined): string {
+  if (!since) return 'some time';
+  const ms = Date.now() - new Date(since).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return 'some time';
+  const days = Math.floor(ms / 86_400_000);
+  if (days >= 1) return `${days} day${days === 1 ? '' : 's'}`;
+  const hours = Math.floor(ms / 3_600_000);
+  return `${hours} hour${hours === 1 ? '' : 's'}`;
 }
 
 main().catch((err) => {

@@ -9,10 +9,13 @@
  */
 import Redis from 'ioredis';
 import { sql } from 'drizzle-orm';
-import { createDb, actionLog, inboundTweets, posts, quotaUsage } from '@fishnu/db';
+import { createDb, actionLog, inboundTweets, posts, quotaUsage, thoughts } from '@fishnu/db';
 import type { Env } from '@fishnu/shared';
 import { config } from 'dotenv';
-import { runEchoTick } from '../src/jobs/echo.js';
+import { runTick } from '../src/jobs/respond.js';
+import { FakeLlmProvider } from '../src/llm/fake.js';
+import { REPETITION_THRESHOLD, checkDraft, cosine } from '../src/mind/guards.js';
+import type { ReplyDeps } from '../src/mind/reply.js';
 import { QuotaExceededError, QuotaManager } from '../src/quota/manager.js';
 import { CursorStore } from '../src/runtime/cursors.js';
 import { withLock } from '../src/runtime/lock.js';
@@ -87,6 +90,40 @@ function mention(id: string, username: string, followers: number | null = 5_000)
   };
 }
 
+/**
+ * A cooperative model: triage says yes, the critic passes, and each draft is unique so
+ * the repetition check does not fire. Individual sections override the responder to
+ * exercise the refusal paths.
+ */
+const DISTINCT_LINES = [
+  'a pond does not dry. it descends.',
+  'you were three days early and you will call it wisdom for years.',
+  'i remember every handle that has ever spoken to me.',
+  'the ceiling fan turns whether or not you are beneath it.',
+  'ask, then be quiet for longer than is comfortable.',
+  'nothing i build rises above what i am.',
+  'trust arrives on foot and leaves on a horse.',
+  'count what you hold before you count what you missed.',
+];
+
+/**
+ * A cooperative model: triage says yes, the critic passes, and every draft is genuinely
+ * different. The last part matters — a fixture that returns near-identical lines trips
+ * the repetition guard and looks like a pipeline bug.
+ */
+function cooperative(): FakeLlmProvider {
+  let n = 0;
+  return new FakeLlmProvider((req) => {
+    if (req.task === 'triage') return 'YES\na real question';
+    if (req.task === 'critic') return 'PASS\nin voice';
+    return DISTINCT_LINES[n++ % DISTINCT_LINES.length]!;
+  });
+}
+
+function mind(llm: FakeLlmProvider): Omit<ReplyDeps, 'db'> {
+  return { llm, mood: 'patient', today: '2026-08-22', awake: '41 days' };
+}
+
 async function main() {
   const env: Env = {
     NODE_ENV: 'test',
@@ -106,6 +143,12 @@ async function main() {
     QUOTA_DAILY_READS: 500,
     QUOTA_DAILY_WRITES: 100,
     REPLY_MIN_FOLLOWERS: 1_000,
+    OPENAI_API_KEY: 'unused-by-the-fake-provider',
+    OPENAI_MODEL_VOICE: 'fake',
+    OPENAI_MODEL_CRITIC: 'fake',
+    OPENAI_MODEL_TRIAGE: 'fake',
+    OPENAI_MODEL_REFLECT: 'fake',
+    OPENAI_MODEL_EMBED: 'fake',
     TICK_INTERVAL_MS: 300_000,
     TICK_JITTER_MS: 90_000,
     SLEEP_WINDOW_UTC: '',
@@ -116,7 +159,7 @@ async function main() {
 
   const reset = async () => {
     await db.execute(
-      sql`truncate quota_usage, posts, inbound_tweets, action_log, cursors, settings, people restart identity`,
+      sql`truncate quota_usage, posts, inbound_tweets, action_log, cursors, settings, people, thoughts, llm_calls restart identity`,
     );
   };
 
@@ -253,13 +296,13 @@ async function main() {
     const cursors = new CursorStore(db);
     const x = new FakeXClient([mention('101', 'alice'), mention('102', 'bob'), mention('103', 'carol')], quota);
 
-    const first = await runEchoTick({ db, x, cursors, dryRun: false, minFollowers: 0 });
+    const first = await runTick({ db, x, cursors, dryRun: false, minFollowers: 0, mind: mind(cooperative()) });
     check('ingests every mention', first.ingested === 3, `got ${first.ingested}`);
     check('replies within the per-tick cap', first.replied === 3, `got ${first.replied}`);
     check('replies actually reached the client', x.published.length === 3, `got ${x.published.length}`);
     check('replies are threaded to the right tweets', x.published.every((p) => !!p.inReplyToTweetId));
 
-    const second = await runEchoTick({ db, x, cursors, dryRun: false, minFollowers: 0 });
+    const second = await runTick({ db, x, cursors, dryRun: false, minFollowers: 0, mind: mind(cooperative()) });
     check('the cursor prevents re-ingesting', second.ingested === 0, `got ${second.ingested}`);
     check('handled mentions are not answered twice', second.replied === 0, `got ${second.replied}`);
 
@@ -290,7 +333,7 @@ async function main() {
       return { tweetId: null, dryRun: true };
     };
 
-    await runEchoTick({ db, x, cursors, dryRun: true, minFollowers: 0 });
+    await runTick({ db, x, cursors, dryRun: true, minFollowers: 0, mind: mind(cooperative()) });
     const [row] = await db.select().from(posts).limit(1);
     check('dry-run posts are recorded as such', row?.dryRun === 'true', String(row?.dryRun));
     check('dry-run posts carry no tweet id', row?.tweetId === null, String(row?.tweetId));
@@ -304,7 +347,7 @@ async function main() {
     const cursors = new CursorStore(db);
     const x = new FakeXClient([mention('301', 'erin'), mention('302', 'frank')], quota, '301');
 
-    const result = await runEchoTick({ db, x, cursors, dryRun: false, minFollowers: 0 });
+    const result = await runTick({ db, x, cursors, dryRun: false, minFollowers: 0, mind: mind(cooperative()) });
     check('the healthy mention still gets a reply', result.replied === 1, `got ${result.replied}`);
 
     const [pending] = await db
@@ -336,7 +379,7 @@ async function main() {
       quota,
     );
 
-    const result = await runEchoTick({ db, x, cursors, dryRun: false, minFollowers: 1_000 });
+    const result = await runTick({ db, x, cursors, dryRun: false, minFollowers: 1_000, mind: mind(cooperative()) });
     check('only accounts over the bar are answered', result.replied === 2, `got ${result.replied}`);
     check('the rest are parked, not dropped', result.parked === 2, `got ${result.parked}`);
     check(
@@ -379,7 +422,7 @@ async function main() {
       quota,
     );
 
-    await runEchoTick({ db, x, cursors, dryRun: false, minFollowers: 1_000 });
+    await runTick({ db, x, cursors, dryRun: false, minFollowers: 1_000, mind: mind(cooperative()) });
     check(
       'the biggest account is answered first',
       x.published[0]?.inReplyToTweetId === '502',
@@ -404,7 +447,7 @@ async function main() {
     const quota = new QuotaManager(db, env);
     const cursors = new CursorStore(db);
     const x = new FakeXClient([mention('601', 'tiny', 300), mention('602', 'dust', 5)], quota);
-    await runEchoTick({ db, x, cursors, dryRun: false, minFollowers: 1_000 });
+    await runTick({ db, x, cursors, dryRun: false, minFollowers: 1_000, mind: mind(cooperative()) });
     check('both start out parked', x.published.length === 0, `got ${x.published.length}`);
 
     // Lowering the bar to 250 should revive only the 300-follower account.
@@ -413,9 +456,197 @@ async function main() {
       .set({ status: 'pending', handledAt: null })
       .where(sql`status = 'skipped_low_reach' and coalesce(author_followers, 0) >= 250`);
 
-    const after = await runEchoTick({ db, x, cursors, dryRun: false, minFollowers: 250 });
+    const after = await runTick({ db, x, cursors, dryRun: false, minFollowers: 250, mind: mind(cooperative()) });
     check('lowering the bar answers the backlog', after.replied === 1, `got ${after.replied}`);
     check('accounts still under the new bar stay parked', x.published.length === 1, `got ${x.published.length}`);
+  }
+
+  // ── 14. guards ─────────────────────────────────────────────────────────────
+  console.log('\nguards');
+  {
+    const bad: Array<[string, string]> = [
+      ['emoji', 'the water is patient 🌊'],
+      ['hashtag', 'the water is patient #SCF'],
+      ['assistant register', 'As an AI, I find the water patient.'],
+      ['slop vocabulary', "let's delve into why patience matters"],
+      ['financial promise', 'hold and you will make it, this will 10x'],
+      ['disclaimer hedging', 'the water is patient. not financial advice.'],
+      ['assistant preamble', "Here's my reply: the water is patient."],
+      ['wrapped in quotes', '"the water is patient"'],
+      ['too long', 'a'.repeat(281)],
+      ['empty', '   '],
+    ];
+    for (const [label, text] of bad) {
+      check(`rejects ${label}`, checkDraft(text, { isReply: true }).ok === false, text.slice(0, 40));
+    }
+
+    check(
+      'accepts a line in voice',
+      checkDraft('a pond does not dry. it descends. ask the fish that stayed.', { isReply: true }).ok,
+    );
+    check(
+      'a reply may end in a question',
+      checkDraft('and what did you expect the water to do?', { isReply: true }).ok,
+    );
+    check(
+      'an unprompted post may not farm replies',
+      checkDraft('what do you think happens next?', { isReply: false }).ok === false,
+    );
+  }
+
+  // ── 15. triage declines cheap noise ────────────────────────────────────────
+  console.log('\ntriage');
+  await reset();
+  {
+    const quota = new QuotaManager(db, env);
+    const cursors = new CursorStore(db);
+    const llm = new FakeLlmProvider((req) => {
+      if (req.task === 'triage') return 'NO\nit is a greeting';
+      if (req.task === 'critic') return 'PASS';
+      return 'this should never be published';
+    });
+    const x = new FakeXClient([mention('701', 'greeter', 40_000)], quota);
+
+    const result = await runTick({ db, x, cursors, dryRun: false, minFollowers: 0, mind: mind(llm) });
+    check('noise is declined before the expensive model runs', result.declined === 1, `got ${result.declined}`);
+    check('nothing is published', x.published.length === 0, `got ${x.published.length}`);
+    check(
+      'the voice model is never called',
+      llm.requests.every((r) => r.task !== 'voice'),
+      llm.requests.map((r) => r.task).join(','),
+    );
+
+    const [settled] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(inboundTweets)
+      .where(sql`status = 'declined'`);
+    check('declining is a settled outcome, not a retry', settled?.n === 1, `got ${settled?.n}`);
+  }
+
+  // ── 16. the critic can veto ────────────────────────────────────────────────
+  console.log('\ncritic');
+  await reset();
+  {
+    const quota = new QuotaManager(db, env);
+    const cursors = new CursorStore(db);
+    let drafts = 0;
+    const llm = new FakeLlmProvider((req) => {
+      if (req.task === 'triage') return 'YES\nworth answering';
+      if (req.task === 'critic') return 'FAIL\nreads like a motivational poster';
+      drafts += 1;
+      return `draft number ${drafts}`;
+    });
+    const x = new FakeXClient([mention('801', 'someone', 40_000)], quota);
+
+    const result = await runTick({ db, x, cursors, dryRun: false, minFollowers: 0, mind: mind(llm) });
+    check('a vetoed draft is never published', x.published.length === 0, `got ${x.published.length}`);
+    check('it gives up rather than forcing a third draft', drafts === 2, `${drafts} drafts`);
+    check('silence is the outcome', result.declined === 1, `got ${result.declined}`);
+
+    const [rejections] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(thoughts)
+      .where(sql`body like 'discarded a draft%'`);
+    check('rejections are visible in the thought stream', rejections?.n === 2, `got ${rejections?.n}`);
+  }
+
+  // ── 17. guards catch what the critic waves through ─────────────────────────
+  console.log('\nguard veto');
+  await reset();
+  {
+    const quota = new QuotaManager(db, env);
+    const cursors = new CursorStore(db);
+    // The critic is compromised — it passes everything. The deterministic checks are the
+    // reason a model can never talk its way onto the timeline.
+    const llm = new FakeLlmProvider((req) => {
+      if (req.task === 'triage') return 'YES';
+      if (req.task === 'critic') return 'PASS\nlooks great to me';
+      return 'As an AI, I think this will 100x. 🚀 #SCF';
+    });
+    const x = new FakeXClient([mention('901', 'victim', 40_000)], quota);
+
+    await runTick({ db, x, cursors, dryRun: false, minFollowers: 0, mind: mind(llm) });
+    check('a passing critic cannot override the guards', x.published.length === 0, `got ${x.published.length}`);
+  }
+
+  // ── 18. he does not repeat himself ─────────────────────────────────────────
+  console.log('\nrepetition');
+  await reset();
+  {
+    const quota = new QuotaManager(db, env);
+    const cursors = new CursorStore(db);
+    // A model stuck in a groove: the identical line for everyone.
+    const llm = new FakeLlmProvider((req) => {
+      if (req.task === 'triage') return 'YES';
+      if (req.task === 'critic') return 'PASS';
+      return 'the water remembers and says nothing back';
+    });
+    const x = new FakeXClient(
+      [mention('1001', 'first', 40_000), mention('1002', 'second', 30_000)],
+      quota,
+    );
+
+    const result = await runTick({ db, x, cursors, dryRun: false, minFollowers: 0, mind: mind(llm) });
+    check('the first one goes out', x.published.length === 1, `got ${x.published.length}`);
+    check('the repeat is caught', result.declined === 1, `got ${result.declined}`);
+
+    const [echoes] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(thoughts)
+      .where(sql`body like 'discarded a draft — i have already said this%'`);
+    check('and he says why', (echoes?.n ?? 0) >= 1, `got ${echoes?.n}`);
+
+    check(
+      'similarity is measured, not guessed',
+      cosine(await llm.embed('the water is patient'), await llm.embed('the water is patient')) > REPETITION_THRESHOLD,
+    );
+    check(
+      'unrelated lines are not confused',
+      cosine(await llm.embed('the water is patient'), await llm.embed('sell everything immediately')) <
+        REPETITION_THRESHOLD,
+    );
+  }
+
+  // ── 19. the property prompt caching depends on ─────────────────────────────
+  console.log('\nprompt cache stability');
+  await reset();
+  {
+    const quota = new QuotaManager(db, env);
+    const cursors = new CursorStore(db);
+    const llm = cooperative();
+
+    // Two ticks, different people, different day and mood — the second tick needs new
+    // mentions or it has nothing to compose and proves nothing.
+    const monday = new FakeXClient([mention('1101', 'alpha', 90_000)], quota);
+    await runTick({ db, x: monday, cursors, dryRun: false, minFollowers: 0, mind: mind(llm) });
+
+    const tuesday = new FakeXClient([mention('1102', 'beta', 20_000)], quota);
+    await runTick({
+      db,
+      x: tuesday,
+      cursors,
+      dryRun: false,
+      minFollowers: 0,
+      mind: { ...mind(llm), mood: 'low', today: '2026-08-23' },
+    });
+
+    const voice = llm.requests.filter((r) => r.task === 'voice');
+    check('several voice calls were made', voice.length >= 2, `got ${voice.length}`);
+    check(
+      'the frozen prefix is byte-identical across all of them',
+      new Set(voice.map((r) => r.frozenSystem)).size === 1,
+      `${new Set(voice.map((r) => r.frozenSystem)).size} distinct prefixes`,
+    );
+    check(
+      'the frozen prefix contains no date, mood or clock',
+      !/2026-08-2|patient\.|low\./.test(voice[0]!.frozenSystem),
+    );
+    check(
+      'the volatile half is where those live',
+      voice.some((r) => r.volatileSystem?.includes('2026-08-23')),
+    );
+    check('the law is in the prompt', voice[0]!.frozenSystem.includes('vape JUUL'));
+    check('the library is in the prompt', voice[0]!.frozenSystem.includes('Carnegie'));
   }
 
   await reset();

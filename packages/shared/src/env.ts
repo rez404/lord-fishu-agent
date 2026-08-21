@@ -41,10 +41,23 @@ const schema = z.object({
   /** Minimum follower count an account needs before the agent spends a reply on it. */
   REPLY_MIN_FOLLOWERS: z.coerce.number().int().nonnegative().default(1_000),
 
+  OPENAI_API_KEY: z.string().min(1),
+  /**
+   * Model ids are configurable because they move faster than this repo will, and a wrong
+   * id fails at runtime rather than at compile time. Verify with `pnpm doctor`.
+   */
+  OPENAI_MODEL_VOICE: z.string().default('gpt-5.6-sol'),
+  OPENAI_MODEL_CRITIC: z.string().default('gpt-5.6-terra'),
+  OPENAI_MODEL_TRIAGE: z.string().default('gpt-5.6-luna'),
+  OPENAI_MODEL_REFLECT: z.string().default('gpt-5.6-terra'),
+  OPENAI_MODEL_EMBED: z.string().default('text-embedding-3-small'),
+
   TICK_INTERVAL_MS: z.coerce.number().int().positive().default(300_000),
   TICK_JITTER_MS: z.coerce.number().int().nonnegative().default(90_000),
   /** UTC window during which the agent stays quiet, e.g. "03:00-09:00". Empty disables it. */
   SLEEP_WINDOW_UTC: z.string().default(''),
+  /** When he was first switched on. Surfaced in the prompt and on the terminal. */
+  AWAKENED_AT: z.string().optional(),
 });
 
 /**
