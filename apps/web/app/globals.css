@@ -1,0 +1,445 @@
+/*
+ * A drowned CRT.
+ *
+ * The usual terminal is green phosphor on black. This one has been underwater for a
+ * while: the phosphor has gone seafoam, light refracts across the glass in slow
+ * caustics, and every so often a wave passes and the picture wavers. Everything here
+ * exists to sell that one idea.
+ */
+
+:root {
+  --abyss: #03090b;
+  --abyss-deep: #010405;
+  --abyss-lift: #071417;
+
+  --phosphor: #7fe8c4;
+  --phosphor-dim: #3d8574;
+  --phosphor-faint: #1d4640;
+
+  --bio: #ffc178;        /* bioluminescence: numbers, prompts, things that matter */
+  --coral: #ff7d6c;      /* wrong, dead, refused */
+  --drowned: #5fa8ff;    /* the other voice */
+
+  --glow: 0 0 12px rgba(127, 232, 196, 0.35);
+  --glow-bio: 0 0 12px rgba(255, 193, 120, 0.4);
+
+  --gutter: clamp(0.85rem, 3vw, 2.5rem);
+  --line: 1.62;
+
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background: var(--abyss-deep);
+}
+
+body {
+  font-family: var(--font-body), ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: clamp(0.78rem, 0.5rem + 0.9vw, 0.95rem);
+  line-height: var(--line);
+  color: var(--phosphor);
+  text-shadow: var(--glow);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* ── the tank ──────────────────────────────────────────────────────────────── */
+
+.tank {
+  position: relative;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(120% 90% at 50% -10%, #0a2028 0%, transparent 60%),
+    radial-gradient(90% 70% at 50% 110%, #04141a 0%, transparent 65%),
+    var(--abyss);
+  isolation: isolate;
+}
+
+/* Light from a surface far above, moving. */
+.tank::before {
+  content: "";
+  position: fixed;
+  inset: -30%;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(38% 26% at 22% 18%, rgba(90, 220, 200, 0.16), transparent 70%),
+    radial-gradient(30% 20% at 74% 34%, rgba(70, 170, 220, 0.13), transparent 70%),
+    radial-gradient(44% 30% at 46% 76%, rgba(60, 200, 180, 0.1), transparent 72%);
+  filter: blur(46px);
+  animation: caustics 23s ease-in-out infinite alternate;
+}
+
+@keyframes caustics {
+  0%   { transform: translate3d(-3%, -2%, 0) scale(1);    opacity: 0.85; }
+  50%  { transform: translate3d(2%, 3%, 0) scale(1.09);   opacity: 1; }
+  100% { transform: translate3d(4%, -3%, 0) scale(1.03);  opacity: 0.75; }
+}
+
+/* Scanlines + the curve of the glass. */
+.tank::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0) 0px,
+      rgba(0, 0, 0, 0) 2px,
+      rgba(0, 0, 0, 0.28) 3px,
+      rgba(0, 0, 0, 0.28) 4px
+    ),
+    radial-gradient(120% 100% at 50% 50%, transparent 52%, rgba(0, 0, 0, 0.62) 100%);
+  mix-blend-mode: multiply;
+}
+
+/* Silt suspended in the water. */
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0.055;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* A wave passes over the screen. Rare and short, or it becomes nausea. */
+.screen {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: var(--gutter);
+  padding-bottom: 0;
+  animation: waver 17s ease-in-out infinite;
+}
+
+@keyframes waver {
+  0%, 92%, 100% { transform: none; filter: none; }
+  94%           { transform: scaleY(1.006) skewX(0.12deg); filter: blur(0.32px) brightness(1.06); }
+  96%           { transform: scaleY(0.997) skewX(-0.08deg); filter: blur(0.16px) brightness(0.97); }
+  98%           { transform: scaleY(1.002); filter: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tank::before,
+  .screen,
+  .cursor,
+  .boot-line,
+  .stream-line {
+    animation: none !important;
+  }
+}
+
+/* ── type ──────────────────────────────────────────────────────────────────── */
+
+.wordmark {
+  font-family: var(--font-body), ui-monospace, monospace;
+  white-space: pre;
+  line-height: 1.05;
+  /* The art is 61 characters wide. Sized to span roughly half the viewport on desktop
+     and to still fit a 320px phone, rather than to a fixed type scale. */
+  font-size: clamp(0.4rem, 1.5vw, 1.4rem);
+  letter-spacing: 0;
+  color: var(--phosphor);
+  text-shadow: 0 0 18px rgba(127, 232, 196, 0.45), 0 0 40px rgba(60, 180, 200, 0.2);
+  margin: 0;
+  overflow: hidden;
+}
+
+.rule {
+  border: 0;
+  border-top: 1px solid var(--phosphor-faint);
+  margin: 1.1rem 0;
+  opacity: 0.75;
+}
+
+.dim { color: var(--phosphor-dim); text-shadow: none; }
+.faint { color: var(--phosphor-faint); text-shadow: none; }
+.bio { color: var(--bio); text-shadow: var(--glow-bio); }
+.coral { color: var(--coral); text-shadow: 0 0 10px rgba(255, 125, 108, 0.35); }
+.drowned { color: var(--drowned); text-shadow: 0 0 10px rgba(95, 168, 255, 0.35); }
+
+/* ── boot ──────────────────────────────────────────────────────────────────── */
+
+.boot { flex: 1; }
+
+.boot-line {
+  white-space: pre-wrap;
+  opacity: 0;
+  animation: reveal 0.14s steps(1, end) forwards;
+}
+
+@keyframes reveal {
+  to { opacity: 1; }
+}
+
+.dots {
+  color: var(--phosphor-faint);
+  text-shadow: none;
+}
+
+/* The dot leaders are drawn with real characters so they line up with the grid, which
+   means a narrow screen has to shrink the whole block rather than reflow it. */
+@media (max-width: 32rem) {
+  .boot { font-size: 0.87em; }
+  .dots { letter-spacing: -0.06em; }
+}
+
+/* ── menu ──────────────────────────────────────────────────────────────────── */
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.menu-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.34rem 0.5rem;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-shadow: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, padding-left 0.12s ease;
+}
+
+.menu-item:hover,
+.menu-item:focus-visible {
+  background: linear-gradient(90deg, rgba(127, 232, 196, 0.09), transparent 70%);
+  border-left-color: var(--bio);
+  padding-left: 0.85rem;
+  outline: none;
+}
+
+.menu-key {
+  color: var(--bio);
+  text-shadow: var(--glow-bio);
+  flex: none;
+}
+
+.menu-name {
+  flex: none;
+  min-width: 15ch;
+  letter-spacing: 0.08em;
+}
+
+.menu-desc {
+  color: var(--phosphor-dim);
+  text-shadow: none;
+}
+
+@media (max-width: 34rem) {
+  .menu-item { flex-wrap: wrap; gap: 0.15rem 0.6rem; }
+  .menu-desc { flex-basis: 100%; padding-left: 3.4ch; font-size: 0.92em; }
+}
+
+/* ── screens ───────────────────────────────────────────────────────────────── */
+
+.view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.view-title {
+  font-family: var(--font-display), monospace;
+  letter-spacing: 0.22em;
+  font-size: 0.86em;
+  color: var(--bio);
+  text-shadow: var(--glow-bio);
+  margin: 0;
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--phosphor-faint) transparent;
+  padding-right: 0.4rem;
+}
+
+.entry {
+  padding: 0.42rem 0 0.5rem;
+  border-bottom: 1px dashed rgba(29, 70, 64, 0.55);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.entry:last-child { border-bottom: 0; }
+
+.entry-meta {
+  color: var(--phosphor-faint);
+  text-shadow: none;
+  font-size: 0.88em;
+  letter-spacing: 0.04em;
+}
+
+/* A live tail belongs at the bottom of the screen, growing upward toward the prompt —
+   pinned to the top it reads as a static list that happens to update. */
+.scroll.tail {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.stream-line {
+  animation: surface 0.4s ease-out both;
+}
+
+@keyframes surface {
+  from { opacity: 0; transform: translateY(0.4rem); filter: blur(1.5px); }
+  to   { opacity: 1; transform: none; filter: none; }
+}
+
+.empty {
+  color: var(--phosphor-dim);
+  text-shadow: none;
+  padding: 1.4rem 0;
+  white-space: pre-wrap;
+}
+
+/* ── prompt ────────────────────────────────────────────────────────────────── */
+
+.prompt-dock {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding: 0.7rem 0 0.45rem;
+  background: linear-gradient(180deg, transparent, var(--abyss) 38%);
+}
+
+.prompt {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.prompt-sigil {
+  color: var(--bio);
+  text-shadow: var(--glow-bio);
+  flex: none;
+}
+
+.prompt-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--phosphor);
+  font: inherit;
+  text-shadow: inherit;
+  caret-color: transparent;
+  outline: none;
+  padding: 0;
+}
+
+.prompt-echo {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  white-space: pre;
+  overflow: hidden;
+}
+
+.cursor {
+  display: inline-block;
+  width: 0.62em;
+  height: 1.02em;
+  vertical-align: text-bottom;
+  background: var(--phosphor);
+  box-shadow: var(--glow);
+  animation: blink 1.06s steps(1, end) infinite;
+}
+
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.hint {
+  color: var(--phosphor-faint);
+  text-shadow: none;
+  font-size: 0.86em;
+  margin-top: 0.3rem;
+  letter-spacing: 0.03em;
+}
+
+/* ── status bar ────────────────────────────────────────────────────────────── */
+
+.statusbar {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1.4rem;
+  padding: 0.4rem var(--gutter) 0.55rem;
+  border-top: 1px solid var(--phosphor-faint);
+  background: var(--abyss-deep);
+  color: var(--phosphor-dim);
+  text-shadow: none;
+  font-size: 0.82em;
+  letter-spacing: 0.05em;
+}
+
+.statusbar b {
+  font-weight: 400;
+  color: var(--phosphor);
+  text-shadow: var(--glow);
+}
+
+.statusbar .sev { color: var(--coral); }
+
+/* ── transcripts (the backrooms) ───────────────────────────────────────────── */
+
+.transcript {
+  max-width: 92ch;
+  margin: 0 auto;
+  padding: var(--gutter);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.actor {
+  color: var(--bio);
+  text-shadow: var(--glow-bio);
+  letter-spacing: 0.06em;
+}
+
+.actor.other { color: var(--drowned); text-shadow: 0 0 10px rgba(95, 168, 255, 0.35); }
+
+.turn { margin: 0 0 1.5rem; }
+
+a { color: var(--bio); text-decoration: none; border-bottom: 1px dotted currentColor; }
+a:hover { background: rgba(255, 193, 120, 0.12); }
+
+::selection { background: rgba(127, 232, 196, 0.28); }

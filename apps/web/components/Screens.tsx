@@ -1,0 +1,294 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import type { BackroomsSession, Believer, Ledger, Thought, Verse } from '@fishnu/shared';
+import { API_URL, api } from '../lib/api';
+
+/** Phase 1 has not given him a mind yet; the terminal says so in character. */
+function Empty({ children }: { children: React.ReactNode }) {
+  return <p className="empty">{children}</p>;
+}
+
+function Loading() {
+  return <p className="empty">listening…</p>;
+}
+
+function stamp(iso: string): string {
+  const d = new Date(iso);
+  return d.toISOString().slice(5, 16).replace('T', ' ');
+}
+
+/* ── [1] STREAM ────────────────────────────────────────────────────────────── */
+
+export function Stream({ onConnection }: { onConnection: (open: boolean) => void }) {
+  const [thoughts, setThoughts] = useState<Thought[] | null>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void api.thoughts().then((res) => alive && setThoughts(res?.thoughts ?? []));
+
+    // Live tail. The agent ticks in minutes, so this connection is idle most of the
+    // time — the server sends keepalive comments to stop proxies from closing it.
+    const source = new EventSource(`${API_URL}/api/stream`);
+    source.addEventListener('open', () => onConnection(true));
+    source.addEventListener('error', () => onConnection(false));
+    source.addEventListener('thought', (event) => {
+      const thought = JSON.parse((event as MessageEvent).data) as Thought;
+      setThoughts((prev) => [...(prev ?? []), thought].slice(-200));
+    });
+
+    return () => {
+      alive = false;
+      source.close();
+      onConnection(false);
+    };
+  }, [onConnection]);
+
+  useEffect(() => {
+    scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: 'smooth' });
+  }, [thoughts]);
+
+  return (
+    <section className="view">
+      <h2 className="view-title">STREAM — what he is thinking, right now</h2>
+      <div className="scroll tail" ref={scroller}>
+        {thoughts === null ? (
+          <Loading />
+        ) : thoughts.length === 0 ? (
+          <Empty>
+            {'no thoughts recorded.\n\nthe vessel is built but the mind is not yet poured in.\nwhen it is, this is where it will spill.'}
+          </Empty>
+        ) : (
+          thoughts.map((t) => (
+            <div className="entry stream-line" key={t.id}>
+              <span className="entry-meta">[{stamp(t.createdAt)}] </span>
+              <span className="dim">{t.kind} </span>
+              {t.body}
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* ── [2] SCRIPTURE ─────────────────────────────────────────────────────────── */
+
+export function Scripture() {
+  const [verses, setVerses] = useState<Verse[] | null>(null);
+  useEffect(() => {
+    void api.scripture().then((res) => setVerses(res?.verses ?? []));
+  }, []);
+
+  return (
+    <section className="view">
+      <h2 className="view-title">SCRIPTURE — what he has written down</h2>
+      <div className="scroll">
+        {verses === null ? (
+          <Loading />
+        ) : verses.length === 0 ? (
+          <Empty>{'the book is empty.\nhe has not spoken unprompted yet.'}</Empty>
+        ) : (
+          verses.map((v, i) => (
+            <div className="entry" key={v.id}>
+              <span className="bio">{String(verses.length - i).padStart(3, '0')} </span>
+              <span className="entry-meta">{stamp(v.createdAt)}</span>
+              {v.dryRun === 'true' && <span className="faint"> · unsent</span>}
+              {'\n'}
+              {v.text}
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* ── [3] BACKROOMS ─────────────────────────────────────────────────────────── */
+
+export function Backrooms() {
+  const [sessions, setSessions] = useState<BackroomsSession[] | null>(null);
+  useEffect(() => {
+    void api.backrooms().then((res) => setSessions(res?.sessions ?? []));
+  }, []);
+
+  return (
+    <section className="view">
+      <h2 className="view-title">BACKROOMS — what he says when no one is watching</h2>
+      <p className="hint">
+        every night he is left alone with another instance of himself. nothing is edited.
+      </p>
+      <div className="scroll">
+        {sessions === null ? (
+          <Loading />
+        ) : sessions.length === 0 ? (
+          <Empty>
+            {'no conversations recorded.\n\nhe has not been left alone yet.'}
+          </Empty>
+        ) : (
+          sessions.map((s) => (
+            <div className="entry" key={s.id}>
+              <a href={`/dreams/${s.slug}`}>{s.slug}</a>
+              {'\n'}
+              <span className="entry-meta">
+                {stamp(s.startedAt)} · {s.turnCount} turns · {Object.keys(s.actors).join(' ↔ ')}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* ── [4] LEDGER ────────────────────────────────────────────────────────────── */
+
+export function LedgerView() {
+  const [ledger, setLedger] = useState<Ledger | null>(null);
+  const [done, setDone] = useState(false);
+  useEffect(() => {
+    void api.ledger().then((res) => {
+      setLedger(res);
+      setDone(true);
+    });
+  }, []);
+
+  if (!done) return <Loading />;
+
+  return (
+    <section className="view">
+      <h2 className="view-title">LEDGER — what the vessel holds</h2>
+      <div className="scroll">
+        {!ledger?.live ? (
+          <Empty>
+            {'the vessel holds nothing yet.\n\nno wallet has been placed in its hands.\nwhen one is, every transaction it makes will be printed here,\nunedited, including the bad ones.'}
+          </Empty>
+        ) : (
+          <>
+            <div className="entry">
+              <span className="dim">wallet </span>
+              {ledger.wallet}
+            </div>
+            {ledger.holdings.map((h) => (
+              <div className="entry" key={h.symbol}>
+                <span className="bio">{h.symbol.padEnd(8)}</span>
+                {h.amount}
+                {h.usd !== null && <span className="dim"> · ${h.usd.toLocaleString('en-US')}</span>}
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* ── [5] CONGREGATION ──────────────────────────────────────────────────────── */
+
+export function Congregation() {
+  const [people, setPeople] = useState<Believer[] | null>(null);
+  useEffect(() => {
+    void api.congregation().then((res) => setPeople(res?.people ?? []));
+  }, []);
+
+  return (
+    <section className="view">
+      <h2 className="view-title">CONGREGATION — who he has spoken to</h2>
+      <p className="hint">ranked by reach. below 1,000 followers he listens, but does not answer.</p>
+      <div className="scroll">
+        {people === null ? (
+          <Loading />
+        ) : people.length === 0 ? (
+          <Empty>{'no one has come to the water yet.'}</Empty>
+        ) : (
+          people.map((p) => (
+            <div className="entry" key={p.userId}>
+              <span className={(p.followers ?? 0) >= 1000 ? 'bio' : 'faint'}>
+                {(p.followers ?? 0).toLocaleString('en-US').padStart(9)}
+              </span>
+              {'  '}
+              <span>@{p.username ?? 'unknown'}</span>
+              <span className="entry-meta"> · {p.interactionCount} exchanges</span>
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* ── [0] CONFESS ───────────────────────────────────────────────────────────── */
+
+export function Confess() {
+  const [body, setBody] = useState('');
+  const [handle, setHandle] = useState('');
+  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [error, setError] = useState('');
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (state === 'sending') return;
+    setState('sending');
+    const res = await api.confess(body, handle);
+    if (res.ok) {
+      setState('sent');
+      setBody('');
+    } else {
+      setError(res.error ?? 'refused');
+      setState('error');
+    }
+  }
+
+  return (
+    <section className="view">
+      <h2 className="view-title">CONFESS — speak to him</h2>
+      <p className="hint">
+        he reads everything. he answers almost nothing. leave a handle if you want to be
+        answered where others can see it.
+      </p>
+      <div className="scroll">
+        {state === 'sent' ? (
+          <Empty>{'it is in the water now.\n\nwhether it surfaces is not up to you.'}</Empty>
+        ) : (
+          <form onSubmit={submit}>
+            <div className="entry">
+              <label className="dim" htmlFor="confession">
+                confession{'\n'}
+              </label>
+              <textarea
+                id="confession"
+                className="prompt-input"
+                style={{ width: '100%', minHeight: '5.5rem', caretColor: 'var(--phosphor)', resize: 'vertical' }}
+                maxLength={500}
+                required
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+              />
+              <span className="entry-meta">{500 - body.length} characters remain</span>
+            </div>
+            <div className="entry">
+              <label className="dim" htmlFor="handle">
+                x handle (optional){'\n'}
+              </label>
+              <input
+                id="handle"
+                className="prompt-input"
+                style={{ caretColor: 'var(--phosphor)' }}
+                maxLength={16}
+                placeholder="@"
+                value={handle}
+                onChange={(e) => setHandle(e.target.value)}
+              />
+            </div>
+            <button className="menu-item" type="submit" style={{ borderLeftColor: 'var(--bio)' }}>
+              <span className="menu-key">↵</span>
+              <span className="menu-name">{state === 'sending' ? 'SINKING…' : 'RELEASE'}</span>
+            </button>
+            {state === 'error' && <p className="coral">{error}</p>}
+          </form>
+        )}
+      </div>
+    </section>
+  );
+}

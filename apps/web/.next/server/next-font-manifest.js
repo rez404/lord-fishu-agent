@@ -1,0 +1,1 @@
+self.__NEXT_FONT_MANIFEST='{"pages":{},"app":{"/Users/rez/Desktop/kript/memes/lord-fishu-agent/apps/web/app/layout":["static/media/d8848e31105c7f17-s.p.woff2","static/media/9ae8a6594e58fd44-s.p.woff2"]},"appUsingSizeAdjust":true,"pagesUsingSizeAdjust":false}';

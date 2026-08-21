@@ -1,0 +1,24 @@
+{
+  "name": "@fishnu/agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "smoke": "tsx scripts/smoke.ts",
+    "requeue": "tsx scripts/requeue.ts",
+    "seed": "tsx scripts/seed.ts"
+  },
+  "dependencies": {
+    "@fishnu/db": "workspace:*",
+    "@fishnu/shared": "workspace:*",
+    "drizzle-orm": "^0.38.3",
+    "ioredis": "^5.4.2",
+    "twitter-api-v2": "^1.19.0"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.7"
+  }
+}

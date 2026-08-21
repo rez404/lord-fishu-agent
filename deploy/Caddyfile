@@ -1,0 +1,12 @@
+{$API_DOMAIN} {
+	encode zstd gzip
+
+	# SSE must not be buffered or the terminal looks frozen; flush_interval -1 streams
+	# every write straight through.
+	reverse_proxy api:8081 {
+		flush_interval -1
+		transport http {
+			response_header_timeout 24h
+		}
+	}
+}

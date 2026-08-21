@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: fishnu
+      POSTGRES_PASSWORD: fishnu
+      POSTGRES_DB: fishnu
+    ports: ["5433:5432"]
+    volumes: ["fishnu_pg:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fishnu"]
+      interval: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    ports: ["6380:6379"]
+    volumes: ["fishnu_redis:/data"]
+volumes:
+  fishnu_pg:
+  fishnu_redis:

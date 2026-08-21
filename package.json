@@ -1,0 +1,25 @@
+{
+  "name": "lord-fishnu",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.11.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev:agent": "pnpm --filter @fishnu/agent dev",
+    "dev:api": "pnpm --filter @fishnu/api dev",
+    "dev:web": "pnpm --filter @fishnu/web dev",
+    "smoke": "pnpm --filter @fishnu/agent smoke",
+    "start:agent": "pnpm --filter @fishnu/agent start",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @fishnu/db generate",
+    "db:push": "pnpm --filter @fishnu/db push",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
