@@ -88,6 +88,8 @@ const apiSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   DATABASE_URL: z.string().url(),
   API_PORT: z.coerce.number().int().positive().default(8081),
+  /** Bearer token for the operator routes. Unset disables them entirely. */
+  ADMIN_TOKEN: z.string().optional(),
   /** Comma-separated list of allowed browser origins (the Vercel deployment + previews). */
   CORS_ORIGINS: z.string().default('http://localhost:3000'),
 });

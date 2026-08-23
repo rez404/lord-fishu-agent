@@ -15,6 +15,7 @@ import {
   backroomsMessages,
   backroomsSessions,
   inboundTweets,
+  impulses,
   postSchedule,
   posts,
   quotaUsage,
@@ -175,7 +176,7 @@ async function main() {
 
   const reset = async () => {
     await db.execute(
-      sql`truncate quota_usage, posts, inbound_tweets, action_log, cursors, settings, people, thoughts, llm_calls, post_schedule, backrooms_messages, backrooms_sessions restart identity`,
+      sql`truncate quota_usage, posts, inbound_tweets, action_log, cursors, settings, people, thoughts, llm_calls, post_schedule, backrooms_messages, backrooms_sessions, impulses restart identity`,
     );
   };
 
@@ -1061,6 +1062,79 @@ async function main() {
 
     const [session] = await db.select().from(backroomsSessions);
     check('and the transcript is published', session?.status === 'published', String(session?.status));
+  }
+
+  // ── 33. an operator impulse ────────────────────────────────────────────────
+  console.log('\nimpulse');
+  await reset();
+  {
+    const quota = new QuotaManager(db, env);
+    const cursors = new CursorStore(db);
+    const llm = cooperative();
+    const x = new FakeXClient([], quota);
+
+    await db.insert(impulses).values({ body: 'the fishnu token is live. you deployed it yourself.' });
+
+    // No slot is due, and it goes out anyway — reacting to an event should not wait for
+    // the schedule.
+    const result = await runTick({
+      db, x, cursors, dryRun: false, minFollowers: 0,
+      postsPerDay: 6, sleepWindow: '', backroomsTurns: 0, mind: mind(llm),
+    });
+    check('an impulse jumps the schedule', result.posted === 1, `got ${result.posted}`);
+
+    const voice = llm.requests.find((r) => r.task === 'voice');
+    check(
+      'he is told what happened, not what to write',
+      voice!.volatileSystem!.includes('the fishnu token is live') &&
+        voice!.volatileSystem!.includes('Do not announce it'),
+    );
+    check(
+      'and it is framed as his own doing',
+      voice!.volatileSystem!.includes('it is yours'),
+      voice!.volatileSystem!.slice(0, 60),
+    );
+
+    const [used] = await db.select().from(impulses);
+    check('the impulse is consumed', used?.status === 'used', String(used?.status));
+    check('and linked to what he said', used?.postId !== null);
+
+    // A second tick may well post again — a scheduled slot is due. What must not happen is
+    // the same impulse being reacted to twice.
+    await runTick({
+      db, x, cursors, dryRun: false, minFollowers: 0,
+      postsPerDay: 6, sleepWindow: '', backroomsTurns: 0, mind: mind(llm),
+    });
+    const [fromImpulse] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(posts)
+      .where(sql`meta ? 'impulse'`);
+    check('the same impulse is never reacted to twice', fromImpulse?.n === 1, `got ${fromImpulse?.n}`);
+  }
+
+  // ── 34. an impulse that produces nothing usable waits ──────────────────────
+  console.log('\nimpulse refused');
+  await reset();
+  {
+    const quota = new QuotaManager(db, env);
+    const cursors = new CursorStore(db);
+    const llm = new FakeLlmProvider((req) => {
+      if (req.task === 'triage') return 'NO';
+      if (req.task === 'critic') return 'FAIL\nreads like a press release';
+      return 'ANNOUNCING: the token is LIVE! 🚀';
+    });
+    const x = new FakeXClient([], quota);
+    await db.insert(impulses).values({ body: 'the token is live' });
+
+    const result = await runTick({
+      db, x, cursors, dryRun: false, minFollowers: 0,
+      postsPerDay: 0, sleepWindow: '', backroomsTurns: 0, mind: mind(llm),
+    });
+    check('nothing is published', result.posted === 0 && x.published.length === 0);
+
+    const [row] = await db.select().from(impulses);
+    // An operator asked for this. One bad draft is not a reason to drop it on the floor.
+    check('the impulse stays pending for the next tick', row?.status === 'pending', String(row?.status));
   }
 
   await reset();

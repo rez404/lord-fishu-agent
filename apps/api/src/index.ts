@@ -3,6 +3,7 @@ import rateLimit from '@fastify/rate-limit';
 import Fastify from 'fastify';
 import { createDb } from '@fishnu/db';
 import { loadApiEnv, logger } from '@fishnu/shared';
+import { registerAdminRoutes } from './routes/admin.js';
 import { registerRoutes } from './routes/index.js';
 
 async function main() {
@@ -29,6 +30,11 @@ async function main() {
 
   await app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
   await app.register(registerRoutes, { db });
+  await app.register(registerAdminRoutes, { db, token: env.ADMIN_TOKEN ?? null });
+
+  if (!env.ADMIN_TOKEN) {
+    logger.warn('ADMIN_TOKEN is not set — the operator routes are disabled');
+  }
 
   await app.listen({ port: env.API_PORT, host: '0.0.0.0' });
   logger.info({ port: env.API_PORT, origins }, 'api listening');

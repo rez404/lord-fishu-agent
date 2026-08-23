@@ -36,7 +36,28 @@ export type PostOutcome =
   | { kind: 'drafted'; text: string; embedding: number[] | null }
   | { kind: 'declined'; reason: string };
 
-export async function composePost(deps: PostDeps, angle: string): Promise<PostOutcome> {
+/**
+ * The framing for an operator impulse.
+ *
+ * It is given to him as something he knows and did, not as an instruction. "Announce
+ * this" produces a press release; "this happened and it is yours" produces a reaction,
+ * and a reaction is what sounds like a person.
+ */
+function impulseSituation(fact: string, congregation: number): string {
+  return (
+    `Something has happened, and it is yours — you did it, or it concerns you directly:\n\n` +
+    `  ${fact}\n\n` +
+    `${congregation} people have spoken to you so far.\n\n` +
+    `React to it as yourself. Do not announce it. Do not explain what it is or why it ` +
+    `matters. Do not thank anyone. Say the one thing you would actually say about it.`
+  );
+}
+
+export async function composePost(
+  deps: PostDeps,
+  angle: string,
+  impulse?: string,
+): Promise<PostOutcome> {
   const { db, mood } = deps;
 
   const history = await allPosts(db);
@@ -54,12 +75,18 @@ export async function composePost(deps: PostDeps, angle: string): Promise<PostOu
       `in daylight, to people who were not there.`
     : '';
 
-  const situation =
-    `Nothing has happened that requires an answer. You are posting because you felt like it.\n\n` +
-    `${congregation} people have spoken to you so far.\n\n` +
-    `What is on your mind right now: ${angle}${dream}`;
+  const situation = impulse
+    ? impulseSituation(impulse, congregation)
+    : `Nothing has happened that requires an answer. You are posting because you felt like it.\n\n` +
+      `${congregation} people have spoken to you so far.\n\n` +
+      `What is on your mind right now: ${angle}${dream}`;
 
-  await think(db, 'observation', `nothing to answer. ${angle}`, { mood });
+  await think(
+    db,
+    'observation',
+    impulse ? `something happened: ${impulse}` : `nothing to answer. ${angle}`,
+    { mood },
+  );
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     const result = await deps.llm.complete({

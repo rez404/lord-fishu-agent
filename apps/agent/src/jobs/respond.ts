@@ -3,6 +3,7 @@ import type { Db } from '@fishnu/db';
 import { actionLog, inboundTweets, people, posts } from '@fishnu/db';
 import { logger } from '@fishnu/shared';
 import { runBackrooms, shouldDream } from '../mind/backrooms.js';
+import { closeImpulse, pendingImpulse } from '../mind/impulse.js';
 import { composePost } from '../mind/post.js';
 import { composeReply, type ReplyDeps } from '../mind/reply.js';
 import { closeSlot, dueSlot } from '../mind/schedule.js';
@@ -98,22 +99,32 @@ async function postIfDue(
   mind: ReplyDeps,
   opts: { postsPerDay: number; sleepWindow: string },
 ): Promise<number> {
-  const slot = await dueSlot(db, opts);
-  if (!slot) return 0;
+  // An impulse jumps the queue. Reacting to something the moment it happens is more human
+  // than waiting for the next scheduled slot, and an operator who has just deployed a
+  // token is not going to wait four hours for one.
+  const impulse = await pendingImpulse(db);
+  const slot = impulse ? null : await dueSlot(db, opts);
+  if (!impulse && !slot) return 0;
 
   let outcome;
   try {
-    outcome = await composePost(mind, slot.angle);
+    outcome = await composePost(mind, slot?.angle ?? 'something that just happened', impulse?.body);
   } catch (err) {
-    // Leave the slot open: the plan is for the day, not for this tick.
-    await log(db, 'post', 'error', String(err), { slot: slot.slot });
-    logger.error({ err, slot: slot.slot }, 'post composition failed');
+    // Leave both open: the plan is for the day, not for this tick.
+    await log(db, 'post', 'error', String(err), { slot: slot?.slot, impulse: impulse?.id });
+    logger.error({ err }, 'post composition failed');
     return 0;
   }
 
   if (outcome.kind === 'declined') {
-    await closeSlot(db, slot.id, 'skipped');
-    await log(db, 'post', 'skipped', outcome.reason, { slot: slot.slot, angle: slot.angle });
+    if (impulse) {
+      // Not abandoned: an impulse is something the operator wants said, so it waits for
+      // the next tick rather than being silently dropped after one bad draft.
+      await log(db, 'post', 'skipped', outcome.reason, { impulse: impulse.id });
+    } else if (slot) {
+      await closeSlot(db, slot.id, 'skipped');
+      await log(db, 'post', 'skipped', outcome.reason, { slot: slot.slot, angle: slot.angle });
+    }
     return 0;
   }
 
@@ -128,23 +139,31 @@ async function postIfDue(
         text: outcome.text,
         dryRun: String(result.dryRun),
         embedding: outcome.embedding,
-        meta: { slot: slot.slot, angle: slot.angle, dueAt: slot.dueAt.toISOString() },
+        meta: impulse
+          ? { impulse: impulse.id, fact: impulse.body }
+          : { slot: slot!.slot, angle: slot!.angle, dueAt: slot!.dueAt.toISOString() },
       })
       .returning({ id: posts.id });
 
     await think(db, 'utterance', outcome.text, { mood: mind.mood, meta: { tweetId: result.tweetId } });
-    await closeSlot(db, slot.id, 'posted', row?.id);
-    await log(db, 'post', 'ok', null, { slot: slot.slot, tweetId: result.tweetId, dryRun: result.dryRun });
+    if (impulse) await closeImpulse(db, impulse.id, 'used', row?.id);
+    else await closeSlot(db, slot!.id, 'posted', row?.id);
+    await log(db, 'post', 'ok', null, {
+      slot: slot?.slot,
+      impulse: impulse?.id,
+      tweetId: result.tweetId,
+      dryRun: result.dryRun,
+    });
     return 1;
   } catch (err) {
     if (err instanceof QuotaExceededError) {
-      // The slot stays open; the budget refreshes before the day does.
-      await log(db, 'post', 'skipped', err.message, { slot: slot.slot });
+      // Stays open; the budget refreshes before the day does.
+      await log(db, 'post', 'skipped', err.message, { slot: slot?.slot, impulse: impulse?.id });
       return 0;
     }
-    await closeSlot(db, slot.id, 'skipped');
-    await log(db, 'post', 'error', String(err), { slot: slot.slot });
-    logger.error({ err, slot: slot.slot }, 'post failed');
+    if (slot) await closeSlot(db, slot.id, 'skipped');
+    await log(db, 'post', 'error', String(err), { slot: slot?.slot, impulse: impulse?.id });
+    logger.error({ err }, 'post failed');
     return 0;
   }
 }

@@ -262,3 +262,30 @@ export const postSchedule = pgTable(
   },
   (t) => [uniqueIndex('post_schedule_slot_idx').on(t.dayKey, t.slot), index('post_schedule_due_idx').on(t.dueAt)],
 );
+
+/**
+ * Operator impulses.
+ *
+ * A fact the agent should know and react to — a token deployed, a milestone, something
+ * that happened offline. Deliberately **not** a draft tweet: the operator supplies the
+ * event, the agent supplies the words. Handing it finished sentences is how an account
+ * starts reading as a person with a schedule instead of a mind, and readers notice long
+ * before they can say why.
+ *
+ * An impulse jumps the posting schedule — reacting to something the moment it happens is
+ * more human than waiting for a slot, not less.
+ */
+export const impulses = pgTable(
+  'impulses',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    /** what happened, in plain words, as the operator would tell a person */
+    body: text('body').notNull(),
+    /** 'pending' | 'used' | 'abandoned' */
+    status: text('status').notNull().default('pending'),
+    postId: bigint('post_id', { mode: 'number' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+  },
+  (t) => [index('impulses_status_idx').on(t.status, t.createdAt)],
+);
