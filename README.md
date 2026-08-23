@@ -4,7 +4,7 @@ An autonomous X (Twitter) agent with its own persona, memory, goals, and wallet.
 See [PLAN.md](./PLAN.md) for the architecture and roadmap.
 
 **Status: replies, unprompted posting, and the nightly backrooms are live.** The X backbone, the public terminal, and the reply pipeline
-are built and verified — 132 checks pass against real Postgres and Redis with a fake model
+are built and verified — 135 checks pass against real Postgres and Redis with a fake model
 provider. What is still missing: proactive discovery, the wallet, and Spaces.
 
 Nothing has been run against a real API key yet. `pnpm doctor` is the first thing to run
@@ -90,7 +90,7 @@ himself across months, not days. Two checks run, because they fail differently:
 
 | Check | Catches |
 |---|---|
-| Cosine over embeddings (≥0.78) | the same *idea*, said differently |
+| Cosine over embeddings (≥0.78) | the same *idea*, said differently — skipped if the gateway cannot embed |
 | Content-word overlap (≥0.6) | the same *sentence*, reworded or reordered |
 
 Embeddings miss a clause-swap that scores below threshold but is obviously the same post
@@ -167,18 +167,32 @@ still hold the line.
 
 ### Provider
 
-OpenAI, behind `apps/agent/src/llm/types.ts`. Switching to Claude means writing one more
-adapter — the prompts, the pipeline, the guards and every test are provider-agnostic.
+**[PPQ](https://ppq.ai)** — pay-per-prompt, OpenAI-compatible wire format — behind
+`apps/agent/src/llm/types.ts`. `LLM_BASE_URL` is the only thing that changes to move to
+OpenAI directly, or to any other compatible gateway; the prompts, the pipeline, the
+guards and every test are provider-agnostic.
 
-| Task | Model | Why |
-|---|---|---|
-| `voice` | `gpt-5.6-sol` | anything that gets published; quality is the product |
-| `critic` | `gpt-5.6-terra` | judgement, not prose |
-| `triage` | `gpt-5.6-luna` | high volume, low judgement |
-| embeddings | `text-embedding-3-small` | repetition check only |
+The adapter speaks **Chat Completions**, not the Responses API, and sends only universal
+fields (`model`, `messages`, `max_tokens`). A gateway normalises one request shape across
+many upstream models, and an unknown field is a 400 from some of them — so per-provider
+knobs like `reasoning_effort` are deliberately not sent.
 
-Model ids live in `.env` because they move faster than this repo does. Roughly **$4/day**
-at 100 replies — but only if prompt caching holds (see below).
+| Task | What it is for |
+|---|---|
+| `voice` | anything that gets published; quality is the product |
+| `critic` | judgement, not prose |
+| `triage` | high volume, low judgement |
+| `dream` | the nightly backrooms |
+| embeddings | repetition checking only |
+
+Model ids live in `.env` and are almost certainly wrong until you look: `pnpm doctor`
+lists exactly what your key can reach and flags anything configured that is not in the
+catalogue.
+
+**If embeddings are unavailable** the repetition check degrades to word overlap rather
+than taking the pipeline down — overlap needs no network. There is a test for this,
+because the embeddings endpoint is the one part of the model API that cannot be verified
+without a key.
 
 ### The prompt is split frozen/volatile
 

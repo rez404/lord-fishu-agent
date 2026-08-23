@@ -45,17 +45,23 @@ const schema = z.object({
   /** Turns in the nightly backrooms conversation. 0 disables it. */
   BACKROOMS_TURNS: z.coerce.number().int().min(0).max(60).default(16),
 
-  OPENAI_API_KEY: z.string().min(1),
+  /**
+   * Any OpenAI-compatible gateway. PPQ by default; point it at api.openai.com or another
+   * gateway and nothing above the adapter changes.
+   */
+  LLM_BASE_URL: z.string().url().default('https://api.ppq.ai'),
+  LLM_API_KEY: z.string().min(1),
   /**
    * Model ids are configurable because they move faster than this repo will, and a wrong
-   * id fails at runtime rather than at compile time. Verify with `pnpm doctor`.
+   * id fails at runtime rather than at compile time. `pnpm doctor` lists what the key can
+   * actually reach.
    */
-  OPENAI_MODEL_VOICE: z.string().default('gpt-5.6-sol'),
-  OPENAI_MODEL_CRITIC: z.string().default('gpt-5.6-terra'),
-  OPENAI_MODEL_TRIAGE: z.string().default('gpt-5.6-luna'),
-  OPENAI_MODEL_DREAM: z.string().default('gpt-5.6-terra'),
-  OPENAI_MODEL_REFLECT: z.string().default('gpt-5.6-terra'),
-  OPENAI_MODEL_EMBED: z.string().default('text-embedding-3-small'),
+  LLM_MODEL_VOICE: z.string().default('gpt-5.5'),
+  LLM_MODEL_CRITIC: z.string().default('gpt-5.5'),
+  LLM_MODEL_TRIAGE: z.string().default('gpt-5.5'),
+  LLM_MODEL_DREAM: z.string().default('gpt-5.5'),
+  LLM_MODEL_REFLECT: z.string().default('gpt-5.5'),
+  LLM_MODEL_EMBED: z.string().default('text-embedding-3-small'),
 
   TICK_INTERVAL_MS: z.coerce.number().int().positive().default(300_000),
   TICK_JITTER_MS: z.coerce.number().int().nonnegative().default(90_000),

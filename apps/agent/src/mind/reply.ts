@@ -1,9 +1,9 @@
 import type { Db } from '@fishnu/db';
 import { buildFrozenPrompt, buildVolatilePrompt } from '@fishnu/persona';
-import { logger } from '@fishnu/shared';
 import { recordCall } from '../llm/ledger.js';
 import type { LlmProvider } from '../llm/types.js';
-import { REPETITION_THRESHOLD, checkDraft, cosine } from './guards.js';
+import { findEcho, safeEmbed } from './echo.js';
+import { REPETITION_THRESHOLD, checkDraft } from './guards.js';
 import { recallPerson, recentPosts } from './memory.js';
 import { MOODS, type Mood } from './mood.js';
 import { think } from './thoughts.js';
@@ -29,7 +29,7 @@ export interface ReplyCandidate {
 }
 
 export type ReplyOutcome =
-  | { kind: 'drafted'; text: string; embedding: number[] }
+  | { kind: 'drafted'; text: string; embedding: number[] | null }
   | { kind: 'declined'; reason: string };
 
 export interface ReplyDeps {
@@ -156,10 +156,10 @@ export async function composeReply(deps: ReplyDeps, c: ReplyCandidate): Promise<
       continue;
     }
 
-    const embedding = await deps.llm.embed(text);
-    const echo = await findEcho(db, embedding);
+    const embedding = await safeEmbed(deps.llm, text);
+    const echo = findEcho(text, embedding, await recentPosts(db), REPETITION_THRESHOLD);
     if (echo) {
-      await think(db, 'deliberation', `discarded a draft — i have already said this: "${echo}"`, {
+      await think(db, 'deliberation', `discarded a draft — ${echo.why}: "${echo.text}"`, {
         mood,
         meta: { attempt, text },
       });
@@ -175,23 +175,6 @@ export async function composeReply(deps: ReplyDeps, c: ReplyCandidate): Promise<
 
   await think(db, 'decision', `i have nothing to say to @${c.authorUsername ?? '?'}`, { mood });
   return { kind: 'declined', reason: 'no draft survived the critic' };
-}
-
-/** The most similar thing he has already published, if it is too similar. */
-async function findEcho(db: Db, embedding: number[]): Promise<string | null> {
-  const recent = await recentPosts(db);
-  let worst: { text: string; score: number } | null = null;
-
-  for (const post of recent) {
-    if (!post.embedding) continue;
-    const score = cosine(embedding, post.embedding);
-    if (score >= REPETITION_THRESHOLD && (!worst || score > worst.score)) {
-      worst = { text: post.text, score };
-    }
-  }
-
-  if (worst) logger.debug({ score: worst.score }, 'draft rejected as a repeat');
-  return worst?.text ?? null;
 }
 
 /** The situation block handed to the model. Written in his own frame, not as metadata. */

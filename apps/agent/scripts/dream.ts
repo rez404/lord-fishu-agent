@@ -10,7 +10,7 @@
 import { createDb } from '@fishnu/db';
 import { loadEnv, logger } from '@fishnu/shared';
 import { runBackrooms } from '../src/mind/backrooms.js';
-import { OpenAiProvider } from '../src/llm/openai.js';
+import { OpenAiCompatibleProvider } from '../src/llm/provider.js';
 
 async function main() {
   const env = loadEnv();
@@ -19,10 +19,11 @@ async function main() {
   const flag = process.argv.indexOf('--turns');
   const turns = flag > -1 ? Number(process.argv[flag + 1]) : env.BACKROOMS_TURNS;
 
-  const llm = new OpenAiProvider({
-    apiKey: env.OPENAI_API_KEY,
-    models: { dream: env.OPENAI_MODEL_DREAM },
-    embedModel: env.OPENAI_MODEL_EMBED,
+  const llm = new OpenAiCompatibleProvider({
+    apiKey: env.LLM_API_KEY,
+    baseUrl: env.LLM_BASE_URL,
+    models: { dream: env.LLM_MODEL_DREAM },
+    embedModel: env.LLM_MODEL_EMBED,
   });
 
   const result = await runBackrooms({ db, llm, turns });

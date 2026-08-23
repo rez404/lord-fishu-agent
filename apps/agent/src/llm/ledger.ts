@@ -4,8 +4,11 @@ import { logger } from '@fishnu/shared';
 import type { CompleteResult, Task } from './types.js';
 
 /**
- * Per-1M-token prices, USD. Verified 2026-08-22 against OpenAI's pricing page; they will
- * drift, and the numbers here only drive the cost panel, never any behaviour.
+ * Per-1M-token prices, USD, for cost *display* only — never for any behaviour.
+ *
+ * These are OpenAI's own rates. Running through a gateway means the real price is the
+ * gateway's, so an unknown model simply reports $0 and the token counts in `llm_calls`
+ * remain the honest number. Add the gateway's rates here when they matter enough.
  */
 const PRICING: Record<string, { input: number; cached: number; output: number }> = {
   'gpt-5.6-sol': { input: 4.0, cached: 0.4, output: 20.0 },

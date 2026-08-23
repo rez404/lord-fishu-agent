@@ -157,13 +157,14 @@ async function main() {
     REPLY_MIN_FOLLOWERS: 1_000,
     POSTS_PER_DAY: 6,
     BACKROOMS_TURNS: 16,
-    OPENAI_MODEL_DREAM: 'fake',
-    OPENAI_API_KEY: 'unused-by-the-fake-provider',
-    OPENAI_MODEL_VOICE: 'fake',
-    OPENAI_MODEL_CRITIC: 'fake',
-    OPENAI_MODEL_TRIAGE: 'fake',
-    OPENAI_MODEL_REFLECT: 'fake',
-    OPENAI_MODEL_EMBED: 'fake',
+    LLM_BASE_URL: 'https://api.ppq.ai',
+    LLM_API_KEY: 'unused-by-the-fake-provider',
+    LLM_MODEL_VOICE: 'fake',
+    LLM_MODEL_CRITIC: 'fake',
+    LLM_MODEL_TRIAGE: 'fake',
+    LLM_MODEL_DREAM: 'fake',
+    LLM_MODEL_REFLECT: 'fake',
+    LLM_MODEL_EMBED: 'fake',
     TICK_INTERVAL_MS: 300_000,
     TICK_JITTER_MS: 90_000,
     SLEEP_WINDOW_UTC: '',
@@ -617,10 +618,12 @@ async function main() {
     check('the first one goes out', x.published.length === 1, `got ${x.published.length}`);
     check('the repeat is caught', result.declined === 1, `got ${result.declined}`);
 
+    // Either check may be the one that fires — overlap runs first and catches an exact
+    // repeat before the embedding does. What matters is that he says so, not which.
     const [echoes] = await db
       .select({ n: sql<number>`count(*)::int` })
       .from(thoughts)
-      .where(sql`body like 'discarded a draft — i have already said this%'`);
+      .where(sql`body like 'discarded a draft — %said this%' or body like 'discarded a draft — %rewording%'`);
     check('and he says why', (echoes?.n ?? 0) >= 1, `got ${echoes?.n}`);
 
     check(
@@ -979,6 +982,52 @@ async function main() {
     check('and it reaches the post prompt',
       words.some((w) => w.includes('having no options')),
       words.join(' | ').slice(0, 80));
+  }
+
+  // ── 31. the gateway cannot embed ───────────────────────────────────────────
+  console.log('\nembeddings unavailable');
+  await reset();
+  {
+    const quota = new QuotaManager(db, env);
+    const cursors = new CursorStore(db);
+    let n = 0;
+    const llm = new FakeLlmProvider((req) => {
+      if (req.task === 'triage') return 'YES';
+      if (req.task === 'critic') return 'PASS';
+      return DISTINCT_LINES[n++ % DISTINCT_LINES.length]!;
+    });
+    // The one part of the model API that cannot be verified without a key.
+    llm.embed = async () => {
+      throw new Error('404 model not found: text-embedding-3-small');
+    };
+
+    const x = new FakeXClient([mention('1201', 'someone', 40_000)], quota);
+    const result = await runTick({
+      db, x, cursors, dryRun: false, minFollowers: 0, postsPerDay: 0, sleepWindow: '', backroomsTurns: 0,
+      mind: mind(llm),
+    });
+    check('a reply still goes out', result.replied === 1, `got ${result.replied}`);
+
+    const [row] = await db.select().from(posts).limit(1);
+    check('stored without an embedding', row?.embedding === null, JSON.stringify(row?.embedding));
+
+    // Degraded, not disabled: word overlap needs no network and still catches a repeat.
+    const repeat = new FakeLlmProvider((req) => {
+      if (req.task === 'triage') return 'YES';
+      if (req.task === 'critic') return 'PASS';
+      return DISTINCT_LINES[0]!;
+    });
+    repeat.embed = async () => {
+      throw new Error('still unavailable');
+    };
+    await db.insert(posts).values({ kind: 'post', text: DISTINCT_LINES[0]!, dryRun: 'false' });
+
+    const x2 = new FakeXClient([mention('1202', 'another', 30_000)], quota);
+    const second = await runTick({
+      db, x: x2, cursors, dryRun: false, minFollowers: 0, postsPerDay: 0, sleepWindow: '', backroomsTurns: 0,
+      mind: mind(repeat),
+    });
+    check('and a repeat is still caught, by overlap alone', second.replied === 0, `got ${second.replied}`);
   }
 
   await reset();

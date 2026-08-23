@@ -6,14 +6,14 @@
  * Model ids and the exact request shape are the two things that cannot be verified
  * without a key — they fail at runtime, not at compile time, and the failure would
  * otherwise surface as a silent tick error at 3am. Run this first after setting
- * OPENAI_API_KEY, and again whenever a model id changes.
+ * LLM_API_KEY, and again whenever a model id or the gateway changes.
  *
  * Costs a few cents. Publishes nothing.
  */
 import { buildFrozenPrompt, buildVolatilePrompt } from '@fishnu/persona';
 import { loadEnv, logger } from '@fishnu/shared';
 import { estimateCostUsd } from '../src/llm/ledger.js';
-import { OpenAiProvider } from '../src/llm/openai.js';
+import { OpenAiCompatibleProvider } from '../src/llm/provider.js';
 import { checkDraft } from '../src/mind/guards.js';
 import { MOODS } from '../src/mind/mood.js';
 import type { Task } from '../src/llm/types.js';
@@ -23,24 +23,44 @@ const TASKS: Task[] = ['triage', 'critic', 'voice'];
 async function main() {
   const env = loadEnv();
 
-  if (!env.OPENAI_API_KEY || env.OPENAI_API_KEY.startsWith('sk-not-set')) {
-    console.error('OPENAI_API_KEY is not set in .env');
+  if (!env.LLM_API_KEY || env.LLM_API_KEY.startsWith('sk-not-set')) {
+    console.error('LLM_API_KEY is not set in .env');
     process.exit(1);
   }
 
-  const llm = new OpenAiProvider({
-    apiKey: env.OPENAI_API_KEY,
+  console.log(`\ngateway: ${env.LLM_BASE_URL}`);
+
+  const llm = new OpenAiCompatibleProvider({
+    apiKey: env.LLM_API_KEY,
+    baseUrl: env.LLM_BASE_URL,
     models: {
-      voice: env.OPENAI_MODEL_VOICE,
-      critic: env.OPENAI_MODEL_CRITIC,
-      triage: env.OPENAI_MODEL_TRIAGE,
-      reflect: env.OPENAI_MODEL_REFLECT,
+      voice: env.LLM_MODEL_VOICE,
+      critic: env.LLM_MODEL_CRITIC,
+      triage: env.LLM_MODEL_TRIAGE,
+      reflect: env.LLM_MODEL_REFLECT,
     },
-    embedModel: env.OPENAI_MODEL_EMBED,
+    embedModel: env.LLM_MODEL_EMBED,
   });
 
   let failed = 0;
   let spent = 0;
+
+  // The catalogue first: a 404 on a model id is the most likely failure, and the fix is
+  // always "pick one from this list".
+  try {
+    const models = await llm.listModels();
+    console.log(`\n${models.length} models reachable with this key\n`);
+    const configured = new Set(TASKS.map((t) => llm.modelFor(t)).concat(env.LLM_MODEL_EMBED));
+    for (const id of models) {
+      console.log(`  ${configured.has(id) ? '*' : ' '} ${id}`);
+    }
+    const unknown = [...configured].filter((m) => !models.includes(m));
+    if (unknown.length) {
+      console.log(`\n  ⚠ configured but not in the catalogue: ${unknown.join(', ')}`);
+    }
+  } catch (err) {
+    console.log(`\ncould not list models (${describe(err)}) — continuing to the probes\n`);
+  }
 
   console.log('\nreaching each model\n');
   for (const task of TASKS) {
@@ -64,10 +84,10 @@ async function main() {
   console.log('\nembeddings\n');
   try {
     const vec = await llm.embed('the water is patient');
-    console.log(`  ok    ${env.OPENAI_MODEL_EMBED.padEnd(24)} ${vec.length} dimensions`);
+    console.log(`  ok    ${env.LLM_MODEL_EMBED.padEnd(24)} ${vec.length} dimensions`);
   } catch (err) {
     failed += 1;
-    console.log(`  FAIL  ${env.OPENAI_MODEL_EMBED.padEnd(24)} ${describe(err)}`);
+    console.log(`  FAIL  ${env.LLM_MODEL_EMBED.padEnd(24)} ${describe(err)}`);
   }
 
   if (failed > 0) {

@@ -2,13 +2,8 @@ import type { Db } from '@fishnu/db';
 import { buildFrozenPrompt, buildVolatilePrompt } from '@fishnu/persona';
 import { recordCall } from '../llm/ledger.js';
 import type { LlmProvider } from '../llm/types.js';
-import {
-  OVERLAP_THRESHOLD,
-  POST_REPETITION_THRESHOLD,
-  checkDraft,
-  cosine,
-  overlap,
-} from './guards.js';
+import { findEcho, safeEmbed } from './echo.js';
+import { POST_REPETITION_THRESHOLD, checkDraft } from './guards.js';
 import { lastNightsWords } from './backrooms.js';
 import { allPosts, congregationSize } from './memory.js';
 import { MOODS, type Mood } from './mood.js';
@@ -38,7 +33,7 @@ export interface PostDeps {
 }
 
 export type PostOutcome =
-  | { kind: 'drafted'; text: string; embedding: number[] }
+  | { kind: 'drafted'; text: string; embedding: number[] | null }
   | { kind: 'declined'; reason: string };
 
 export async function composePost(deps: PostDeps, angle: string): Promise<PostOutcome> {
@@ -100,8 +95,8 @@ export async function composePost(deps: PostDeps, angle: string): Promise<PostOu
       continue;
     }
 
-    const embedding = await deps.llm.embed(text);
-    const echo = findEcho(text, embedding, history);
+    const embedding = await safeEmbed(deps.llm, text);
+    const echo = findEcho(text, embedding, history, POST_REPETITION_THRESHOLD);
     if (echo) {
       await think(db, 'deliberation', `discarded a post — ${echo.why}: "${echo.text}"`, {
         mood,
@@ -126,30 +121,6 @@ export async function composePost(deps: PostDeps, angle: string): Promise<PostOu
   // convincing than one who posts anyway.
   await think(db, 'decision', 'i had nothing worth saying. skipping.', { mood });
   return { kind: 'declined', reason: 'nothing survived the checks' };
-}
-
-/**
- * Two checks, because they fail differently.
- *
- * Cosine catches "I have said this idea before". Word overlap catches "I have said this
- * *sentence* before, with the clauses swapped" — a rewording can score below the cosine
- * threshold while being obviously the same post to anyone reading the timeline.
- */
-function findEcho(
-  text: string,
-  embedding: number[],
-  history: Array<{ text: string; embedding: number[] | null }>,
-): { text: string; why: string } | null {
-  for (const post of history) {
-    const words = overlap(text, post.text);
-    if (words >= OVERLAP_THRESHOLD) {
-      return { text: post.text, why: 'this is a rewording of' };
-    }
-    if (post.embedding && cosine(embedding, post.embedding) >= POST_REPETITION_THRESHOLD) {
-      return { text: post.text, why: 'i have already said this' };
-    }
-  }
-  return null;
 }
 
 async function criticise(deps: PostDeps, text: string): Promise<{ ok: boolean; why: string }> {

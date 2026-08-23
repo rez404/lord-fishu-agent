@@ -35,16 +35,28 @@ starting, or Caddy cannot obtain a certificate.
 
 ### Deploy
 
+From your machine, in this repo:
+
 ```bash
-sudo mkdir -p /opt/fishnu && sudo chown $USER /opt/fishnu
+ssh root@<host> 'bash -s' < deploy/bootstrap.sh
+```
+
+That installs Docker, opens only 22/80/443, clones to `/opt/fishnu`, and stops with a
+list of what to fill in. Edit `/opt/fishnu/deploy/.env` on the box, then run the same
+command again and it brings the stack up.
+
+It is idempotent — run it after every change to redeploy. It never overwrites an existing
+`deploy/.env`, and it refuses to start with placeholder values still in it.
+
+<details><summary>the same thing by hand</summary>
+
+```bash
 git clone <repo> /opt/fishnu && cd /opt/fishnu
-
-cp deploy/.env.example deploy/.env
-chmod 600 deploy/.env      # this file holds the X write keys
-$EDITOR deploy/.env        # API_DOMAIN, POSTGRES_PASSWORD, CORS_ORIGINS, X_* keys
-
+cp deploy/.env.example deploy/.env && chmod 600 deploy/.env
+$EDITOR deploy/.env
 docker compose -f deploy/docker-compose.yml up -d --build
 ```
+</details>
 
 That is the whole install. The stack starts in order: Postgres → schema migration →
 agent + API → Caddy, which takes a Let's Encrypt certificate on first request.
@@ -57,8 +69,7 @@ docker compose -f deploy/docker-compose.yml logs -f agent
 ### Updating
 
 ```bash
-cd /opt/fishnu && git pull
-docker compose -f deploy/docker-compose.yml up -d --build
+ssh root@<host> 'bash -s' < deploy/bootstrap.sh
 ```
 
 Migrations run automatically before the agent starts. **The agent must never run as more

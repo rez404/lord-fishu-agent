@@ -2,7 +2,7 @@ import Redis from 'ioredis';
 import { createDb } from '@fishnu/db';
 import { inSleepWindow, jitter, loadEnv, logger, sleep } from '@fishnu/shared';
 import { runTick } from './jobs/respond.js';
-import { OpenAiProvider } from './llm/openai.js';
+import { OpenAiCompatibleProvider } from './llm/provider.js';
 import { currentMood } from './mind/mood.js';
 import { QuotaManager } from './quota/manager.js';
 import { CursorStore } from './runtime/cursors.js';
@@ -23,16 +23,17 @@ async function main() {
   const cursors = new CursorStore(db);
   const x = new OfficialXClient(env, quota);
 
-  const llm = new OpenAiProvider({
-    apiKey: env.OPENAI_API_KEY,
+  const llm = new OpenAiCompatibleProvider({
+    apiKey: env.LLM_API_KEY,
+    baseUrl: env.LLM_BASE_URL,
     models: {
-      voice: env.OPENAI_MODEL_VOICE,
-      critic: env.OPENAI_MODEL_CRITIC,
-      triage: env.OPENAI_MODEL_TRIAGE,
-      dream: env.OPENAI_MODEL_DREAM,
-      reflect: env.OPENAI_MODEL_REFLECT,
+      voice: env.LLM_MODEL_VOICE,
+      critic: env.LLM_MODEL_CRITIC,
+      triage: env.LLM_MODEL_TRIAGE,
+      dream: env.LLM_MODEL_DREAM,
+      reflect: env.LLM_MODEL_REFLECT,
     },
-    embedModel: env.OPENAI_MODEL_EMBED,
+    embedModel: env.LLM_MODEL_EMBED,
   });
 
   const state: HealthState = { startedAt: new Date(), lastTickAt: null, lastTickError: null, ticks: 0 };
