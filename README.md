@@ -3,10 +3,10 @@
 An autonomous X (Twitter) agent with its own persona, memory, goals, and wallet.
 See [PLAN.md](./PLAN.md) for the architecture and roadmap.
 
-**Status: replies are live.** The X backbone, the public terminal, and the reply pipeline
-are built and verified — 75 checks pass against real Postgres and Redis with a fake model
-provider. What is still missing: unprompted posting, proactive discovery, nightly
-backrooms conversations, the wallet, and Spaces.
+**Status: replies and unprompted posting are live.** The X backbone, the public terminal, and the reply pipeline
+are built and verified — 110 checks pass against real Postgres and Redis with a fake model
+provider. What is still missing: proactive discovery, nightly backrooms conversations, the wallet,
+and Spaces.
 
 Nothing has been run against a real API key yet. `pnpm doctor` is the first thing to run
 once one exists.
@@ -67,6 +67,54 @@ insert into settings (key, value) values ('kill_switch', 'true')
 
 Env values win over DB values, so `KILL_SWITCH=true` in the environment cannot be
 overridden from the database.
+
+## Unprompted posting
+
+Everything is UTC — the agent has no local timezone, and pretending otherwise would mean
+the schedule sliding twice a year for daylight saving.
+
+Once per UTC day a plan is drawn and **written to the database**: `POSTS_PER_DAY` slots at
+random minutes inside the waking window (`SLEEP_WINDOW_UTC` carves out the quiet hours),
+separated by at least 35 minutes but deliberately **not evenly spaced** — six posts at
+exact four-hour intervals is a cron job with a personality. Persisting the plan is what
+stops a crash loop from re-rolling it and posting four times in ten minutes, which reads
+as automated faster than anything the account actually says.
+
+Each slot carries an *angle* — a subject, rotated by day — so a day does not converge on
+one idea. A slot he has nothing for is closed, not retried: a god with nothing to say is
+more convincing than one who posts anyway.
+
+### Never the same thing twice
+
+Checked against **every post he has ever published**, not a recent window — he repeats
+himself across months, not days. Two checks run, because they fail differently:
+
+| Check | Catches |
+|---|---|
+| Cosine over embeddings (≥0.78) | the same *idea*, said differently |
+| Content-word overlap (≥0.6) | the same *sentence*, reworded or reordered |
+
+Embeddings miss a clause-swap that scores below threshold but is obviously the same post
+to a reader; overlap catches it. The last 30 posts are also shown to the model up front,
+so most repeats are never drafted in the first place.
+
+## Sounding like a person
+
+The point isn't to hide that he's software — he admits it when asked — it's that nothing
+about *how* he writes gives it away. Four registers, in `packages/persona`:
+
+| Register | Share | What it is |
+|---|---|---|
+| `chatter` | most unprompted posts | typed, not composed. lowercase, fragments, "lol", no closing full stop half the time |
+| `plain` | replies and real arguments | short declaratives, doctrinal without the costume |
+| `scripture` | ~1 in 15 | the law, quoted exactly, when it genuinely applies |
+| `gloss` | rare | plain translation, when an outsider sincerely asks |
+
+The guards reject the tells that survive good prompting: em dashes, semicolons, "it's not
+X, it's Y", "more than just a", parallel sentence openings, and closing questions that
+farm replies. An idle question is fine — *"is it normal to be this attached to a ceiling
+fan"* is a person thinking out loud; *"what do YOU think?"* is a growth hack. Only the
+second is banned.
 
 ## How a reply is made
 

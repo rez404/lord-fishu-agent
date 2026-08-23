@@ -2,7 +2,9 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '@fishnu/db';
 import { actionLog, inboundTweets, people, posts } from '@fishnu/db';
 import { logger } from '@fishnu/shared';
+import { composePost } from '../mind/post.js';
 import { composeReply, type ReplyDeps } from '../mind/reply.js';
+import { closeSlot, dueSlot } from '../mind/schedule.js';
 import { think } from '../mind/thoughts.js';
 import { QuotaExceededError } from '../quota/manager.js';
 import type { CursorStore } from '../runtime/cursors.js';
@@ -16,6 +18,7 @@ export interface TickResult {
   replied: number;
   parked: number;
   declined: number;
+  posted: number;
 }
 
 /**
@@ -31,15 +34,81 @@ export async function runTick(deps: {
   cursors: CursorStore;
   dryRun: boolean;
   minFollowers: number;
+  postsPerDay: number;
+  sleepWindow: string;
   mind: Omit<ReplyDeps, 'db'>;
 }): Promise<TickResult> {
-  const { db, x, cursors, dryRun, minFollowers, mind } = deps;
+  const { db, x, cursors, dryRun, minFollowers, postsPerDay, sleepWindow, mind } = deps;
 
   const ingested = await ingestMentions(db, x, cursors);
   const parked = await parkLowReach(db, minFollowers);
   const { replied, declined } = await answerPending(db, x, dryRun, { ...mind, db });
+  const posted = await postIfDue(db, x, { ...mind, db }, { postsPerDay, sleepWindow });
 
-  return { ingested, replied, parked, declined };
+  return { ingested, replied, parked, declined, posted };
+}
+
+/**
+ * Speaking unprompted, if the day's plan says now.
+ *
+ * Runs after replies on purpose: answering someone who is waiting matters more than
+ * having a thought, and if the write budget is nearly spent it should go on the reply.
+ */
+async function postIfDue(
+  db: Db,
+  x: XClient,
+  mind: ReplyDeps,
+  opts: { postsPerDay: number; sleepWindow: string },
+): Promise<number> {
+  const slot = await dueSlot(db, opts);
+  if (!slot) return 0;
+
+  let outcome;
+  try {
+    outcome = await composePost(mind, slot.angle);
+  } catch (err) {
+    // Leave the slot open: the plan is for the day, not for this tick.
+    await log(db, 'post', 'error', String(err), { slot: slot.slot });
+    logger.error({ err, slot: slot.slot }, 'post composition failed');
+    return 0;
+  }
+
+  if (outcome.kind === 'declined') {
+    await closeSlot(db, slot.id, 'skipped');
+    await log(db, 'post', 'skipped', outcome.reason, { slot: slot.slot, angle: slot.angle });
+    return 0;
+  }
+
+  try {
+    const result = await x.publish({ text: outcome.text });
+
+    const [row] = await db
+      .insert(posts)
+      .values({
+        tweetId: result.tweetId,
+        kind: 'post',
+        text: outcome.text,
+        dryRun: String(result.dryRun),
+        embedding: outcome.embedding,
+        meta: { slot: slot.slot, angle: slot.angle, dueAt: slot.dueAt.toISOString() },
+      })
+      .returning({ id: posts.id });
+
+    await think(db, 'utterance', outcome.text, { mood: mind.mood, meta: { tweetId: result.tweetId } });
+    await closeSlot(db, slot.id, 'posted', row?.id);
+    await log(db, 'post', 'ok', null, { slot: slot.slot, tweetId: result.tweetId, dryRun: result.dryRun });
+    return 1;
+  } catch (err) {
+    if (err instanceof QuotaExceededError) {
+      // The slot stays open; the budget refreshes before the day does.
+      await log(db, 'post', 'skipped', err.message, { slot: slot.slot });
+      return 0;
+    }
+    await closeSlot(db, slot.id, 'skipped');
+    await log(db, 'post', 'error', String(err), { slot: slot.slot });
+    logger.error({ err, slot: slot.slot }, 'post failed');
+    return 0;
+  }
 }
 
 async function ingestMentions(db: Db, x: XClient, cursors: CursorStore): Promise<number> {

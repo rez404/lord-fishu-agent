@@ -89,6 +89,8 @@ async function main() {
           cursors,
           dryRun,
           minFollowers,
+          postsPerDay: env.POSTS_PER_DAY,
+          sleepWindow: env.SLEEP_WINDOW_UTC,
           mind: {
             llm,
             mood,

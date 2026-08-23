@@ -1,9 +1,15 @@
 node_modules/
 dist/
+.next/
+.vercel/
+*.tsbuildinfo
+next-env.d.ts
+
 .env
 .env.local
+deploy/.env
+
 *.log
 .DS_Store
 .turbo/
 drizzle/meta/
-deploy/.env

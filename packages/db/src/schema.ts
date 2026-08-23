@@ -228,3 +228,28 @@ export const llmCalls = pgTable(
   },
   (t) => [index('llm_calls_created_idx').on(t.createdAt), index('llm_calls_task_idx').on(t.task)],
 );
+
+/**
+ * The day's posting plan, in UTC.
+ *
+ * Written once per UTC day and then obeyed. It exists on disk rather than in memory so a
+ * restart cannot re-roll the schedule and post twice in an hour — the failure mode that
+ * makes an account look automated faster than anything it actually says.
+ */
+export const postSchedule = pgTable(
+  'post_schedule',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    /** UTC day, e.g. '2026-08-23' */
+    dayKey: text('day_key').notNull(),
+    slot: integer('slot').notNull(),
+    dueAt: timestamp('due_at', { withTimezone: true }).notNull(),
+    /** the angle this slot was planned for, so a day does not converge on one subject */
+    angle: text('angle').notNull(),
+    postedAt: timestamp('posted_at', { withTimezone: true }),
+    /** 'posted' | 'skipped' — a slot he had nothing for is closed, not retried forever */
+    outcome: text('outcome'),
+    postId: bigint('post_id', { mode: 'number' }),
+  },
+  (t) => [uniqueIndex('post_schedule_slot_idx').on(t.dayKey, t.slot), index('post_schedule_due_idx').on(t.dueAt)],
+);

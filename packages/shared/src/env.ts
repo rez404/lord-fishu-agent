@@ -40,6 +40,8 @@ const schema = z.object({
 
   /** Minimum follower count an account needs before the agent spends a reply on it. */
   REPLY_MIN_FOLLOWERS: z.coerce.number().int().nonnegative().default(1_000),
+  /** How many unprompted posts a day. Scattered across the waking window, in UTC. */
+  POSTS_PER_DAY: z.coerce.number().int().min(0).max(40).default(6),
 
   OPENAI_API_KEY: z.string().min(1),
   /**
@@ -73,8 +75,22 @@ const apiSchema = z.object({
   CORS_ORIGINS: z.string().default('http://localhost:3000'),
 });
 
+/**
+ * CLI tools that touch the database but never talk to X. Demanding the account's write
+ * keys to print a schedule would mean they have to be present on any machine that wants
+ * to look at one.
+ */
+const toolSchema = z.object({
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+  DATABASE_URL: z.string().url(),
+  POSTS_PER_DAY: z.coerce.number().int().min(0).max(40).default(6),
+  SLEEP_WINDOW_UTC: z.string().default(''),
+});
+
 export type Env = z.infer<typeof schema>;
 export type ApiEnv = z.infer<typeof apiSchema>;
+export type ToolEnv = z.infer<typeof toolSchema>;
 
 function parse<S extends z.ZodTypeAny>(s: S): z.infer<S> {
   const parsed = s.safeParse(process.env);
@@ -89,6 +105,7 @@ function parse<S extends z.ZodTypeAny>(s: S): z.infer<S> {
 
 let cached: Env | null = null;
 let cachedApi: ApiEnv | null = null;
+let cachedTool: ToolEnv | null = null;
 
 export function loadEnv(): Env {
   if (!cached) cached = parse(schema);
@@ -98,4 +115,9 @@ export function loadEnv(): Env {
 export function loadApiEnv(): ApiEnv {
   if (!cachedApi) cachedApi = parse(apiSchema);
   return cachedApi;
+}
+
+export function loadToolEnv(): ToolEnv {
+  if (!cachedTool) cachedTool = parse(toolSchema);
+  return cachedTool;
 }

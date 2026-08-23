@@ -37,6 +37,22 @@ export async function recallPerson(db: Db, authorId: string): Promise<PersonMemo
   };
 }
 
+/**
+ * Everything he has ever published, newest first.
+ *
+ * Unprompted posts are checked against the whole history rather than a recent window: he
+ * repeats himself across months, not across days, and a six-month-old line resurfacing
+ * verbatim is exactly what makes a timeline read as generated. At a handful of posts a
+ * day this is a few thousand rows — small enough to scan in process, and far short of
+ * needing a vector index.
+ */
+export async function allPosts(
+  db: Db,
+  cap = 5_000,
+): Promise<Array<{ id: number; text: string; embedding: number[] | null }>> {
+  return recentPosts(db, cap);
+}
+
 /** Recent published lines, so a draft can be checked against what he has already said. */
 export async function recentPosts(
   db: Db,
