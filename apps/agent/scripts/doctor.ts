@@ -11,7 +11,7 @@
  * Costs a few cents. Publishes nothing.
  */
 import { buildFrozenPrompt, buildVolatilePrompt } from '@fishnu/persona';
-import { loadEnv, logger } from '@fishnu/shared';
+import { loadToolEnv, logger } from '@fishnu/shared';
 import { estimateCostUsd } from '../src/llm/ledger.js';
 import { OpenAiCompatibleProvider } from '../src/llm/provider.js';
 import { checkDraft } from '../src/mind/guards.js';
@@ -21,7 +21,7 @@ import type { Task } from '../src/llm/types.js';
 const TASKS: Task[] = ['triage', 'critic', 'voice'];
 
 async function main() {
-  const env = loadEnv();
+  const env = loadToolEnv();
 
   if (!env.LLM_API_KEY || env.LLM_API_KEY.startsWith('sk-not-set')) {
     console.error('LLM_API_KEY is not set in .env');
@@ -54,9 +54,12 @@ async function main() {
     for (const id of models) {
       console.log(`  ${configured.has(id) ? '*' : ' '} ${id}`);
     }
-    const unknown = [...configured].filter((m) => !models.includes(m));
-    if (unknown.length) {
-      console.log(`\n  ⚠ configured but not in the catalogue: ${unknown.join(', ')}`);
+    // The catalogue omits bare aliases that the gateway nonetheless resolves
+    // (claude-sonnet-4.6 works while only anthropic/claude-sonnet-4.6 is listed), so this
+    // is a hint to look, not a verdict. The probes below are what actually decide.
+    const unlisted = [...configured].filter((m) => !models.includes(m));
+    if (unlisted.length) {
+      console.log(`\n  note: not in the catalogue, may still resolve as an alias: ${unlisted.join(', ')}`);
     }
   } catch (err) {
     console.log(`\ncould not list models (${describe(err)}) — continuing to the probes\n`);

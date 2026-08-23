@@ -1030,6 +1030,39 @@ async function main() {
     check('and a repeat is still caught, by overlap alone', second.replied === 0, `got ${second.replied}`);
   }
 
+  // ── 32. running before X access exists ─────────────────────────────────────
+  console.log('\nno X credentials');
+  await reset();
+  {
+    const quota = new QuotaManager(db, env);
+    const cursors = new CursorStore(db);
+    const llm = cooperative();
+    const x = new FakeXClient([mention('1301', 'someone', 90_000)], quota);
+
+    // runTick reads the real clock, so the quiet window has to contain whatever hour the
+    // suite happens to run at — otherwise this asserts on the time of day, not the code.
+    const hour = new Date().getUTCHours();
+    const quietNow = `${String(hour).padStart(2, '0')}:00-${String((hour + 1) % 24).padStart(2, '0')}:00`;
+
+    const result = await runTick({
+      db, x, cursors, xEnabled: false, dryRun: false, minFollowers: 0,
+      postsPerDay: 6, sleepWindow: quietNow, backroomsTurns: 4, mind: mind(llm),
+    });
+
+    check('he reads nothing', result.ingested === 0, `got ${result.ingested}`);
+    check('he says nothing', result.replied === 0 && result.posted === 0);
+    check('and nothing reaches X', x.published.length === 0, `got ${x.published.length}`);
+    check(
+      'no money is spent drafting what cannot be published',
+      llm.requests.every((r) => r.task === 'dream'),
+      llm.requests.map((r) => r.task).join(','),
+    );
+    check('but he still dreams', result.dreamt === 4, `got ${result.dreamt}`);
+
+    const [session] = await db.select().from(backroomsSessions);
+    check('and the transcript is published', session?.status === 'published', String(session?.status));
+  }
+
   await reset();
   await redis.quit();
 

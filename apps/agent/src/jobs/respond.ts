@@ -34,6 +34,8 @@ export async function runTick(deps: {
   db: Db;
   x: XClient;
   cursors: CursorStore;
+  /** false when no X credentials are configured: he thinks and dreams, but stays silent. */
+  xEnabled?: boolean;
   dryRun: boolean;
   minFollowers: number;
   postsPerDay: number;
@@ -42,11 +44,17 @@ export async function runTick(deps: {
   mind: Omit<ReplyDeps, 'db'>;
 }): Promise<TickResult> {
   const { db, x, cursors, dryRun, minFollowers, postsPerDay, sleepWindow, backroomsTurns, mind } = deps;
+  const xEnabled = deps.xEnabled ?? true;
 
-  const ingested = await ingestMentions(db, x, cursors);
-  const parked = await parkLowReach(db, minFollowers);
-  const { replied, declined } = await answerPending(db, x, dryRun, { ...mind, db });
-  const posted = await postIfDue(db, x, { ...mind, db }, { postsPerDay, sleepWindow });
+  // Everything timeline-shaped is skipped without credentials — including composing, since
+  // a draft that cannot be published is money spent on nothing. The dream is unaffected:
+  // it never touches X.
+  const ingested = xEnabled ? await ingestMentions(db, x, cursors) : 0;
+  const parked = xEnabled ? await parkLowReach(db, minFollowers) : 0;
+  const { replied, declined } = xEnabled
+    ? await answerPending(db, x, dryRun, { ...mind, db })
+    : { replied: 0, declined: 0 };
+  const posted = xEnabled ? await postIfDue(db, x, { ...mind, db }, { postsPerDay, sleepWindow }) : 0;
   const dreamt = await dreamIfNight(db, mind.llm, backroomsTurns, sleepWindow);
 
   return { ingested, replied, parked, declined, posted, dreamt };

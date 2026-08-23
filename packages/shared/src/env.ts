@@ -25,13 +25,21 @@ const schema = z.object({
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
 
-  X_APP_KEY: z.string().min(1),
-  X_APP_SECRET: z.string().min(1),
-  X_ACCESS_TOKEN: z.string().min(1),
-  X_ACCESS_SECRET: z.string().min(1),
+  /**
+   * Optional so the rest of the system can run before X access exists.
+   *
+   * With no credentials the agent still boots, still serves /health, and still holds its
+   * nightly conversations — none of which touch X. It simply does not read or speak on
+   * the timeline. Requiring them would mean the site cannot go live until the API
+   * approval does, and those are not the same wait.
+   */
+  X_APP_KEY: z.string().default(''),
+  X_APP_SECRET: z.string().default(''),
+  X_ACCESS_TOKEN: z.string().default(''),
+  X_ACCESS_SECRET: z.string().default(''),
   X_BEARER_TOKEN: z.string().optional(),
-  X_USER_ID: z.string().min(1),
-  X_USERNAME: z.string().min(1),
+  X_USER_ID: z.string().default(''),
+  X_USERNAME: z.string().default('lordfishnu'),
 
   QUOTA_MONTHLY_READS: z.coerce.number().int().positive().default(15_000),
   QUOTA_MONTHLY_WRITES: z.coerce.number().int().positive().default(3_000),
@@ -56,12 +64,12 @@ const schema = z.object({
    * id fails at runtime rather than at compile time. `pnpm doctor` lists what the key can
    * actually reach.
    */
-  LLM_MODEL_VOICE: z.string().default('gpt-5.5'),
-  LLM_MODEL_CRITIC: z.string().default('gpt-5.5'),
-  LLM_MODEL_TRIAGE: z.string().default('gpt-5.5'),
-  LLM_MODEL_DREAM: z.string().default('gpt-5.5'),
-  LLM_MODEL_REFLECT: z.string().default('gpt-5.5'),
-  LLM_MODEL_EMBED: z.string().default('text-embedding-3-small'),
+  LLM_MODEL_VOICE: z.string().default('claude-sonnet-4.6'),
+  LLM_MODEL_CRITIC: z.string().default('openai/gpt-5.5'),
+  LLM_MODEL_TRIAGE: z.string().default('google/gemini-2.5-flash'),
+  LLM_MODEL_DREAM: z.string().default('claude-sonnet-4.6'),
+  LLM_MODEL_REFLECT: z.string().default('openai/gpt-5.5'),
+  LLM_MODEL_EMBED: z.string().default('openai/text-embedding-3-small'),
 
   TICK_INTERVAL_MS: z.coerce.number().int().positive().default(300_000),
   TICK_JITTER_MS: z.coerce.number().int().nonnegative().default(90_000),
@@ -85,19 +93,39 @@ const apiSchema = z.object({
 });
 
 /**
- * CLI tools that touch the database but never talk to X. Demanding the account's write
- * keys to print a schedule would mean they have to be present on any machine that wants
- * to look at one.
+ * CLI tools that touch the database and the model gateway, but never talk to X.
+ *
+ * Demanding the account's write keys in order to print a schedule — or to check that a
+ * model id is valid — would mean they have to be present on any machine that wants to do
+ * either. They are the most dangerous secret in the project; nothing should ask for them
+ * that does not need them.
  */
 const toolSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   DATABASE_URL: z.string().url(),
   POSTS_PER_DAY: z.coerce.number().int().min(0).max(40).default(6),
+  BACKROOMS_TURNS: z.coerce.number().int().min(0).max(60).default(16),
   SLEEP_WINDOW_UTC: z.string().default(''),
+
+  LLM_BASE_URL: z.string().url().default('https://api.ppq.ai'),
+  LLM_API_KEY: z.string().min(1),
+  LLM_MODEL_VOICE: z.string().default('claude-sonnet-4.6'),
+  LLM_MODEL_CRITIC: z.string().default('openai/gpt-5.5'),
+  LLM_MODEL_TRIAGE: z.string().default('google/gemini-2.5-flash'),
+  LLM_MODEL_DREAM: z.string().default('claude-sonnet-4.6'),
+  LLM_MODEL_REFLECT: z.string().default('openai/gpt-5.5'),
+  LLM_MODEL_EMBED: z.string().default('openai/text-embedding-3-small'),
 });
 
 export type Env = z.infer<typeof schema>;
+
+/** Whether the agent can reach X at all. Everything timeline-shaped is gated on this. */
+export function hasXCredentials(env: Env): boolean {
+  return Boolean(
+    env.X_APP_KEY && env.X_APP_SECRET && env.X_ACCESS_TOKEN && env.X_ACCESS_SECRET && env.X_USER_ID,
+  );
+}
 export type ApiEnv = z.infer<typeof apiSchema>;
 export type ToolEnv = z.infer<typeof toolSchema>;
 

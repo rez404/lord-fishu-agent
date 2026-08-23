@@ -1,6 +1,6 @@
 import Redis from 'ioredis';
 import { createDb } from '@fishnu/db';
-import { inSleepWindow, jitter, loadEnv, logger, sleep } from '@fishnu/shared';
+import { hasXCredentials, inSleepWindow, jitter, loadEnv, logger, sleep } from '@fishnu/shared';
 import { runTick } from './jobs/respond.js';
 import { OpenAiCompatibleProvider } from './llm/provider.js';
 import { currentMood } from './mind/mood.js';
@@ -39,14 +39,28 @@ async function main() {
   const state: HealthState = { startedAt: new Date(), lastTickAt: null, lastTickError: null, ticks: 0 };
   const health = startHealthServer(Number(process.env.PORT ?? 8080), state, quota);
 
-  const me = await x.me();
-  if (me.id !== env.X_USER_ID) {
-    throw new Error(`X_USER_ID (${env.X_USER_ID}) does not match the authenticated account (${me.id}/@${me.username})`);
+  const xEnabled = hasXCredentials(env);
+
+  if (xEnabled) {
+    const me = await x.me();
+    if (me.id !== env.X_USER_ID) {
+      throw new Error(
+        `X_USER_ID (${env.X_USER_ID}) does not match the authenticated account (${me.id}/@${me.username})`,
+      );
+    }
+    logger.info(
+      { account: `@${me.username}`, dryRun: env.DRY_RUN, minFollowers: await settingsStore.replyMinFollowers() },
+      'Lord Fishnu is awake',
+    );
+  } else {
+    // Not an error. The nightly conversations, the database and the public terminal all
+    // work without X, and waiting for API approval to bring any of it up would be a
+    // choice rather than a constraint.
+    logger.warn(
+      { backroomsTurns: env.BACKROOMS_TURNS },
+      'no X credentials — he can think and dream, but not read or speak. set X_* to change that.',
+    );
   }
-  logger.info(
-    { account: `@${me.username}`, dryRun: env.DRY_RUN, minFollowers: await settingsStore.replyMinFollowers() },
-    'Lord Fishnu is awake',
-  );
 
   let running = true;
   const stop = (signal: string) => {
@@ -89,6 +103,7 @@ async function main() {
           db,
           x,
           cursors,
+          xEnabled,
           dryRun,
           minFollowers,
           postsPerDay: env.POSTS_PER_DAY,

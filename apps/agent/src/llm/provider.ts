@@ -25,16 +25,28 @@ import type { CompleteRequest, CompleteResult, LlmProvider, Task } from './types
 const DEFAULT_BASE_URL = 'https://api.ppq.ai';
 
 /**
- * Sensible starting points from PPQ's catalogue. They are almost certainly not the right
- * ones — run `pnpm doctor`, which lists what the key can actually reach, and set the
- * cheap tiers properly. A wrong id is a runtime 404, not a compile error.
+ * Starting points from PPQ's documented catalogue. Ids on a gateway are namespaced
+ * (`openai/gpt-5.5`), which is exactly the sort of thing that fails at runtime and not at
+ * compile time — `pnpm doctor` lists what the key can actually reach.
+ *
+ * The tiers are chosen, not uniform:
+ *
+ *  - **voice** is Claude. It holds a persona and a register better than anything else
+ *    here, and voice is the entire product.
+ *  - **critic** is deliberately from a *different family* than the drafter. A model
+ *    judging its own output shares its blind spots — it likes the same phrasings for the
+ *    same reasons. An outsider is a real second opinion rather than a rubber stamp.
+ *  - **triage** is the cheapest thing that can answer yes or no, because it runs on
+ *    everything and decides only whether the expensive model runs at all.
  */
 const DEFAULT_MODELS: Record<Task, string> = {
-  voice: 'gpt-5.5',
-  critic: 'gpt-5.5',
-  triage: 'gpt-5.5',
-  dream: 'gpt-5.5',
-  reflect: 'gpt-5.5',
+  voice: 'claude-sonnet-4.6',
+  critic: 'openai/gpt-5.5',
+  // Not a `private/*` model: those route through PPQ's Private Mode Proxy, which is a
+  // separate piece of infrastructure to install and run. Not worth it to answer yes/no.
+  triage: 'google/gemini-2.5-flash',
+  dream: 'claude-sonnet-4.6',
+  reflect: 'openai/gpt-5.5',
 };
 
 export interface ProviderConfig {
@@ -55,7 +67,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     this.name = new URL(baseURL).hostname;
     this.client = new OpenAI({ apiKey: config.apiKey, baseURL });
     this.models = { ...DEFAULT_MODELS, ...config.models };
-    this.embedModel = config.embedModel ?? 'text-embedding-3-small';
+    this.embedModel = config.embedModel ?? 'openai/text-embedding-3-small';
   }
 
   modelFor(task: Task): string {

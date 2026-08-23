@@ -8,12 +8,12 @@
  * unattended for a month, and for filling the archive so the site is not empty at launch.
  */
 import { createDb } from '@fishnu/db';
-import { loadEnv, logger } from '@fishnu/shared';
+import { loadToolEnv, logger } from '@fishnu/shared';
 import { runBackrooms } from '../src/mind/backrooms.js';
 import { OpenAiCompatibleProvider } from '../src/llm/provider.js';
 
 async function main() {
-  const env = loadEnv();
+  const env = loadToolEnv();
   const db = createDb(env.DATABASE_URL);
 
   const flag = process.argv.indexOf('--turns');
