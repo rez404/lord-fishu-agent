@@ -52,19 +52,33 @@ function clampResults(n: number): number {
 }
 
 export class OfficialXClient implements XClient {
-  private readonly rw: TwitterApi;
   private readonly env: Env;
   private readonly quota: QuotaManager;
+  private client: TwitterApi | null = null;
 
   constructor(env: Env, quota: QuotaManager) {
     this.env = env;
     this.quota = quota;
-    this.rw = new TwitterApi({
-      appKey: env.X_APP_KEY,
-      appSecret: env.X_APP_SECRET,
-      accessToken: env.X_ACCESS_TOKEN,
-      accessSecret: env.X_ACCESS_SECRET,
-    });
+  }
+
+  /**
+   * Built on first use, not in the constructor.
+   *
+   * `new TwitterApi({})` throws on empty credentials, so constructing eagerly would take
+   * the whole process down at boot on a box that has no X access yet — even though every
+   * other part of the agent runs fine without it. Nothing reaches this getter while
+   * `hasXCredentials` is false.
+   */
+  private get rw(): TwitterApi {
+    if (!this.client) {
+      this.client = new TwitterApi({
+        appKey: this.env.X_APP_KEY,
+        appSecret: this.env.X_APP_SECRET,
+        accessToken: this.env.X_ACCESS_TOKEN,
+        accessSecret: this.env.X_ACCESS_SECRET,
+      });
+    }
+    return this.client;
   }
 
   async me(): Promise<XUser> {

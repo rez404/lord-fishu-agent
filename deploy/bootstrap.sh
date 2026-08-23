@@ -71,17 +71,32 @@ MSG
 fi
 chmod 600 deploy/.env
 
+unset_key() {
+  value="$(grep -E "^$1=" deploy/.env | head -1 | cut -d= -f2-)"
+  case "$value" in ''|change-me*|sk-not-set*|ppq_your*) return 0 ;; *) return 1 ;; esac
+}
+
+# Hard requirements: without these nothing starts at all.
 missing=""
-for key in API_DOMAIN POSTGRES_PASSWORD LLM_API_KEY X_APP_KEY X_ACCESS_TOKEN X_USER_ID; do
-  value="$(grep -E "^${key}=" deploy/.env | head -1 | cut -d= -f2-)"
-  case "$value" in
-    ''|change-me*|sk-not-set*|ppq_your*) missing="$missing $key" ;;
-  esac
+for key in API_DOMAIN POSTGRES_PASSWORD LLM_API_KEY; do
+  unset_key "$key" && missing="$missing $key"
 done
 if [ -n "$missing" ]; then
   say "deploy/.env is incomplete:$missing"
   echo "fill those in and run this again."
   exit 1
+fi
+
+# X is not a hard requirement. The database, the read API, the public terminal and the
+# nightly conversations all work without it, and waiting for API approval to bring any of
+# them up would be a choice rather than a constraint.
+x_missing=""
+for key in X_APP_KEY X_APP_SECRET X_ACCESS_TOKEN X_ACCESS_SECRET X_USER_ID; do
+  unset_key "$key" && x_missing="$x_missing $key"
+done
+if [ -n "$x_missing" ]; then
+  say "no X credentials:$x_missing"
+  echo "  he will think and dream, but not read or speak. everything else comes up."
 fi
 
 # ── up ──────────────────────────────────────────────────────────────────────
