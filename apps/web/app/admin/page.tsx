@@ -13,6 +13,8 @@ import { API_URL } from '../../lib/api';
 
 interface AdminState {
   settings: { kill_switch: boolean; dry_run: boolean; reply_min_followers: number | null };
+  /** switches pinned on by the environment — this console cannot turn them off */
+  envForced: { kill_switch: boolean; dry_run: boolean };
   counts: { posts: number; thoughts: number; pendingImpulses: number };
   cost: { usd: string; calls: number; cachePct: number };
   impulses: Array<{ id: number; body: string; status: string; createdAt: string }>;
@@ -117,7 +119,7 @@ export default function Admin() {
               <div className="entry">
                 <button
                   className="menu-item"
-                  disabled={busy}
+                  disabled={busy || state.envForced.kill_switch}
                   onClick={() => set('kill_switch', !state.settings.kill_switch)}
                 >
                   <span className={state.settings.kill_switch ? 'menu-key coral' : 'menu-key'}>
@@ -126,11 +128,12 @@ export default function Admin() {
                   <span className="menu-name">KILL SWITCH</span>
                   <span className="menu-desc">
                     {state.settings.kill_switch ? 'halted — he does nothing at all' : 'running'}
+                    {state.envForced.kill_switch && ' · pinned by KILL_SWITCH in the environment'}
                   </span>
                 </button>
                 <button
                   className="menu-item"
-                  disabled={busy}
+                  disabled={busy || state.envForced.dry_run}
                   onClick={() => set('dry_run', !state.settings.dry_run)}
                 >
                   <span className={state.settings.dry_run ? 'menu-key bio' : 'menu-key'}>
@@ -139,6 +142,7 @@ export default function Admin() {
                   <span className="menu-name">DRY RUN</span>
                   <span className="menu-desc">
                     {state.settings.dry_run ? 'composes and records, sends nothing' : 'live — he is speaking'}
+                    {state.envForced.dry_run && ' · pinned by DRY_RUN in the environment, set it to false there to go live'}
                   </span>
                 </button>
               </div>

@@ -51,12 +51,30 @@ export async function registerAdminRoutes(app: FastifyInstance, opts: { db: Db; 
     const rows = await db.select().from(settings);
     const flags = Object.fromEntries(rows.map((r) => [r.key, r.value]));
 
+    /**
+     * What is actually true, not what the database says.
+     *
+     * The agent lets the environment override both switches — DRY_RUN and KILL_SWITCH in
+     * the env win over the stored value, deliberately, so a boot-time hard stop cannot be
+     * undone from a web page. That means the stored flag on its own is a lie: an operator
+     * could toggle DRY RUN off here, see it go off, and still be posting nothing. Report
+     * the effective value and say when the environment is the one deciding.
+     */
+    const envForced = {
+      kill_switch: process.env.KILL_SWITCH === 'true' || process.env.KILL_SWITCH === '1',
+      dry_run: process.env.DRY_RUN === 'true' || process.env.DRY_RUN === '1',
+    };
+
     return {
       settings: {
-        kill_switch: flags.kill_switch ?? false,
-        dry_run: flags.dry_run ?? false,
-        reply_min_followers: flags.reply_min_followers ?? null,
+        kill_switch: envForced.kill_switch || flags.kill_switch === true,
+        dry_run: envForced.dry_run || flags.dry_run === true,
+        reply_min_followers:
+          (flags.reply_min_followers as number | undefined) ??
+          Number(process.env.REPLY_MIN_FOLLOWERS ?? 1000),
       },
+      /** Switches the environment is pinning on, which this console cannot turn off. */
+      envForced,
       counts: {
         posts: postCount?.n ?? 0,
         thoughts: thoughtCount?.n ?? 0,
