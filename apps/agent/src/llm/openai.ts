@@ -20,6 +20,9 @@ const DEFAULT_MODELS: Record<Task, string> = {
   voice: 'gpt-5.6-sol', // what gets published; quality is the entire product
   critic: 'gpt-5.6-terra',
   triage: 'gpt-5.6-luna', // high volume, low judgement
+  // The dream is long and unguarded, and its transcript is the source material the next
+  // day's posts are quarried from — worth more than the cheap tier, less than the voice.
+  dream: 'gpt-5.6-terra',
   reflect: 'gpt-5.6-terra',
 };
 

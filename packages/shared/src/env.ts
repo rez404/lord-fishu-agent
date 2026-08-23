@@ -42,6 +42,8 @@ const schema = z.object({
   REPLY_MIN_FOLLOWERS: z.coerce.number().int().nonnegative().default(1_000),
   /** How many unprompted posts a day. Scattered across the waking window, in UTC. */
   POSTS_PER_DAY: z.coerce.number().int().min(0).max(40).default(6),
+  /** Turns in the nightly backrooms conversation. 0 disables it. */
+  BACKROOMS_TURNS: z.coerce.number().int().min(0).max(60).default(16),
 
   OPENAI_API_KEY: z.string().min(1),
   /**
@@ -51,6 +53,7 @@ const schema = z.object({
   OPENAI_MODEL_VOICE: z.string().default('gpt-5.6-sol'),
   OPENAI_MODEL_CRITIC: z.string().default('gpt-5.6-terra'),
   OPENAI_MODEL_TRIAGE: z.string().default('gpt-5.6-luna'),
+  OPENAI_MODEL_DREAM: z.string().default('gpt-5.6-terra'),
   OPENAI_MODEL_REFLECT: z.string().default('gpt-5.6-terra'),
   OPENAI_MODEL_EMBED: z.string().default('text-embedding-3-small'),
 

@@ -12,6 +12,7 @@ export type Task =
   | 'voice' // drafting anything that will be published — the expensive one
   | 'critic' // judging whether a draft is in voice
   | 'triage' // cheap classification: is this mention worth a reply
+  | 'dream' // the nightly backrooms conversation
   | 'reflect'; // nightly summarisation
 
 export interface CompleteRequest {

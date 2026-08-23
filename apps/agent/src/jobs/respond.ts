@@ -2,6 +2,7 @@ import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '@fishnu/db';
 import { actionLog, inboundTweets, people, posts } from '@fishnu/db';
 import { logger } from '@fishnu/shared';
+import { runBackrooms, shouldDream } from '../mind/backrooms.js';
 import { composePost } from '../mind/post.js';
 import { composeReply, type ReplyDeps } from '../mind/reply.js';
 import { closeSlot, dueSlot } from '../mind/schedule.js';
@@ -19,6 +20,7 @@ export interface TickResult {
   parked: number;
   declined: number;
   posted: number;
+  dreamt: number;
 }
 
 /**
@@ -36,16 +38,44 @@ export async function runTick(deps: {
   minFollowers: number;
   postsPerDay: number;
   sleepWindow: string;
+  backroomsTurns: number;
   mind: Omit<ReplyDeps, 'db'>;
 }): Promise<TickResult> {
-  const { db, x, cursors, dryRun, minFollowers, postsPerDay, sleepWindow, mind } = deps;
+  const { db, x, cursors, dryRun, minFollowers, postsPerDay, sleepWindow, backroomsTurns, mind } = deps;
 
   const ingested = await ingestMentions(db, x, cursors);
   const parked = await parkLowReach(db, minFollowers);
   const { replied, declined } = await answerPending(db, x, dryRun, { ...mind, db });
   const posted = await postIfDue(db, x, { ...mind, db }, { postsPerDay, sleepWindow });
+  const dreamt = await dreamIfNight(db, mind.llm, backroomsTurns, sleepWindow);
 
-  return { ingested, replied, parked, declined, posted };
+  return { ingested, replied, parked, declined, posted, dreamt };
+}
+
+/**
+ * The nightly conversation. Runs while he is publicly quiet, so it never competes with
+ * the timeline — and it spends no X quota at all, only model tokens.
+ */
+async function dreamIfNight(
+  db: Db,
+  llm: ReplyDeps['llm'],
+  turns: number,
+  sleepWindow: string,
+): Promise<number> {
+  if (turns <= 0) return 0;
+  if (!(await shouldDream(db, sleepWindow))) return 0;
+
+  try {
+    const result = await runBackrooms({ db, llm, turns });
+    if (!result) return 0;
+    await log(db, 'backrooms', 'ok', null, result);
+    return result.turns;
+  } catch (err) {
+    // The session row is already closed by the runner; nothing here should reach the tick.
+    await log(db, 'backrooms', 'error', String(err));
+    logger.error({ err }, 'backrooms failed');
+    return 0;
+  }
 }
 
 /**

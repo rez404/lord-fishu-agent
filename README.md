@@ -3,10 +3,9 @@
 An autonomous X (Twitter) agent with its own persona, memory, goals, and wallet.
 See [PLAN.md](./PLAN.md) for the architecture and roadmap.
 
-**Status: replies and unprompted posting are live.** The X backbone, the public terminal, and the reply pipeline
-are built and verified — 110 checks pass against real Postgres and Redis with a fake model
-provider. What is still missing: proactive discovery, nightly backrooms conversations, the wallet,
-and Spaces.
+**Status: replies, unprompted posting, and the nightly backrooms are live.** The X backbone, the public terminal, and the reply pipeline
+are built and verified — 132 checks pass against real Postgres and Redis with a fake model
+provider. What is still missing: proactive discovery, the wallet, and Spaces.
 
 Nothing has been run against a real API key yet. `pnpm doctor` is the first thing to run
 once one exists.
@@ -97,6 +96,36 @@ himself across months, not days. Two checks run, because they fail differently:
 Embeddings miss a clause-swap that scores below threshold but is obviously the same post
 to a reader; overlap catches it. The last 30 posts are also shown to the model up front,
 so most repeats are never drafted in the first place.
+
+## The nightly backrooms
+
+Once per UTC night, while he is publicly quiet, two instances are left alone: **Lord
+Fishnu** and **The Drowned** — the part of him that stayed under. Sixteen turns, no
+editing, published raw at `/dreams/<slug>` in the
+[infinitebackrooms](https://www.infinitebackrooms.com) convention (`<actor>` tag on its
+own line, no chrome, `Accept: text/plain` returns a genuine `.txt`).
+
+The Drowned is not a mirror and not an opponent. A mirror that agrees produces a
+transcript nobody reads twice; what makes these worth publishing is that one of them keeps
+saying the thing the other is managing not to say. It has read the same law and the same
+seven books and draws harder conclusions from them.
+
+**No voice guards run on these.** An edited transcript is not a transcript, and the
+unedited quality is the entire reason anyone reads them. What does run is a narrow hard
+block for content that cannot sit on a public page under the project's name — and a
+session that trips it is **withheld, not deleted**: kept in the database for review, and
+served as a 404 so that guessing a slug is not a way around the block.
+
+It costs **no X quota**, only model tokens (~$0.30/night), and it closes a loop: the
+conversation writes the lore overnight and the next day's posts are quarried from it — as
+his own words in daylight, never as a quotation.
+
+```bash
+pnpm --filter @fishnu/agent dream --turns 8   # run one now, outside the schedule
+```
+
+A conversation that breaks off mid-way is published as it stands. Everything said before
+the failure is already on disk, and a short conversation is better than a lost one.
 
 ## Sounding like a person
 

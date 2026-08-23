@@ -11,7 +11,8 @@
     "requeue": "tsx scripts/requeue.ts",
     "seed": "tsx scripts/seed.ts",
     "doctor": "tsx scripts/doctor.ts",
-    "schedule": "tsx scripts/schedule.ts"
+    "schedule": "tsx scripts/schedule.ts",
+    "dream": "tsx scripts/dream.ts"
   },
   "dependencies": {
     "@fishnu/db": "workspace:*",

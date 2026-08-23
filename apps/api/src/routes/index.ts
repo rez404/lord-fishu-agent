@@ -65,8 +65,18 @@ export async function registerRoutes(app: FastifyInstance, opts: { db: Db }) {
     return { verses: rows };
   });
 
+  /**
+   * Published sessions only. A conversation that is still running would be served
+   * half-written, and one the hard block withheld must never reach the public archive —
+   * it is kept in the database for review, not for reading.
+   */
   app.get('/api/backrooms', async () => {
-    const rows = await db.select().from(backroomsSessions).orderBy(desc(backroomsSessions.startedAt)).limit(100);
+    const rows = await db
+      .select()
+      .from(backroomsSessions)
+      .where(eq(backroomsSessions.status, 'published'))
+      .orderBy(desc(backroomsSessions.startedAt))
+      .limit(100);
     return { sessions: rows };
   });
 
@@ -79,8 +89,10 @@ export async function registerRoutes(app: FastifyInstance, opts: { db: Db }) {
     const [session] = await db
       .select()
       .from(backroomsSessions)
-      .where(eq(backroomsSessions.slug, req.params.slug))
+      .where(and(eq(backroomsSessions.slug, req.params.slug), eq(backroomsSessions.status, 'published')))
       .limit(1);
+    // Withheld and in-progress sessions are indistinguishable from ones that never
+    // existed. Guessing a slug must not be a way around the block.
     if (!session) return reply.code(404).send({ error: 'no such conversation' });
 
     const messages = await db

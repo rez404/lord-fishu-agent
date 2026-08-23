@@ -168,6 +168,15 @@ export const backroomsSessions = pgTable(
     /** actor tag -> model id, e.g. { "lord-fishnu": "claude-opus-5", "the-drowned": "claude-sonnet-5" } */
     actors: jsonb('actors').notNull(),
     turnCount: integer('turn_count').notNull().default(0),
+    /**
+     * 'running' | 'published' | 'withheld'
+     *
+     * The voice guards deliberately do not run on these — an edited transcript is not a
+     * transcript, and the unedited quality is the entire reason anyone reads them. What
+     * does run is a narrow hard block, and a session that trips it is kept but withheld
+     * rather than deleted.
+     */
+    status: text('status').notNull().default('running'),
     startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
     endedAt: timestamp('ended_at', { withTimezone: true }),
   },

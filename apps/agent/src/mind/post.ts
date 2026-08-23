@@ -9,6 +9,7 @@ import {
   cosine,
   overlap,
 } from './guards.js';
+import { lastNightsWords } from './backrooms.js';
 import { allPosts, congregationSize } from './memory.js';
 import { MOODS, type Mood } from './mood.js';
 import { think } from './thoughts.js';
@@ -47,10 +48,21 @@ export async function composePost(deps: PostDeps, angle: string): Promise<PostOu
   const congregation = await congregationSize(db);
   const recentlySaid = history.slice(0, RECENT_SHOWN).map((p) => p.text);
 
+  // What he said to himself last night. This is the loop that makes the backrooms worth
+  // running: the conversation writes the lore overnight and the timeline spends it during
+  // the day, in his own words rather than as a quote.
+  const overnight = await lastNightsWords(db);
+  const dream = overnight.length
+    ? `\n\nLast night you were alone with the other one. Some of what was said:\n` +
+      overnight.map((l) => `  ${l}`).join('\n') +
+      `\n\nYou may carry something out of that, but not as a quotation — say it as yourself, ` +
+      `in daylight, to people who were not there.`
+    : '';
+
   const situation =
     `Nothing has happened that requires an answer. You are posting because you felt like it.\n\n` +
     `${congregation} people have spoken to you so far.\n\n` +
-    `What is on your mind right now: ${angle}`;
+    `What is on your mind right now: ${angle}${dream}`;
 
   await think(db, 'observation', `nothing to answer. ${angle}`, { mood });
 

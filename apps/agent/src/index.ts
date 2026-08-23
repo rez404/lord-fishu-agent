@@ -29,6 +29,7 @@ async function main() {
       voice: env.OPENAI_MODEL_VOICE,
       critic: env.OPENAI_MODEL_CRITIC,
       triage: env.OPENAI_MODEL_TRIAGE,
+      dream: env.OPENAI_MODEL_DREAM,
       reflect: env.OPENAI_MODEL_REFLECT,
     },
     embedModel: env.OPENAI_MODEL_EMBED,
@@ -91,6 +92,7 @@ async function main() {
           minFollowers,
           postsPerDay: env.POSTS_PER_DAY,
           sleepWindow: env.SLEEP_WINDOW_UTC,
+          backroomsTurns: env.BACKROOMS_TURNS,
           mind: {
             llm,
             mood,

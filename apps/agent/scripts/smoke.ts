@@ -9,12 +9,23 @@
  */
 import Redis from 'ioredis';
 import { sql } from 'drizzle-orm';
-import { createDb, actionLog, inboundTweets, postSchedule, posts, quotaUsage, thoughts } from '@fishnu/db';
+import {
+  createDb,
+  actionLog,
+  backroomsMessages,
+  backroomsSessions,
+  inboundTweets,
+  postSchedule,
+  posts,
+  quotaUsage,
+  thoughts,
+} from '@fishnu/db';
 import type { Env } from '@fishnu/shared';
 import { config } from 'dotenv';
 import { runTick } from '../src/jobs/respond.js';
 import { FakeLlmProvider } from '../src/llm/fake.js';
 import { OVERLAP_THRESHOLD, REPETITION_THRESHOLD, checkDraft, cosine, overlap } from '../src/mind/guards.js';
+import { lastNightsWords, runBackrooms, shouldDream } from '../src/mind/backrooms.js';
 import { dueSlot } from '../src/mind/schedule.js';
 import type { ReplyDeps } from '../src/mind/reply.js';
 import { QuotaExceededError, QuotaManager } from '../src/quota/manager.js';
@@ -145,6 +156,8 @@ async function main() {
     QUOTA_DAILY_WRITES: 100,
     REPLY_MIN_FOLLOWERS: 1_000,
     POSTS_PER_DAY: 6,
+    BACKROOMS_TURNS: 16,
+    OPENAI_MODEL_DREAM: 'fake',
     OPENAI_API_KEY: 'unused-by-the-fake-provider',
     OPENAI_MODEL_VOICE: 'fake',
     OPENAI_MODEL_CRITIC: 'fake',
@@ -161,7 +174,7 @@ async function main() {
 
   const reset = async () => {
     await db.execute(
-      sql`truncate quota_usage, posts, inbound_tweets, action_log, cursors, settings, people, thoughts, llm_calls, post_schedule restart identity`,
+      sql`truncate quota_usage, posts, inbound_tweets, action_log, cursors, settings, people, thoughts, llm_calls, post_schedule, backrooms_messages, backrooms_sessions restart identity`,
     );
   };
 
@@ -298,13 +311,15 @@ async function main() {
     const cursors = new CursorStore(db);
     const x = new FakeXClient([mention('101', 'alice'), mention('102', 'bob'), mention('103', 'carol')], quota);
 
-    const first = await runTick({ db, x, cursors, dryRun: false, minFollowers: 0, postsPerDay: 0, sleepWindow: '', mind: mind(cooperative()) });
+    const first = await runTick({ db, x, cursors, dryRun: false, minFollowers: 0, postsPerDay: 0, sleepWindow: '', backroomsTurns: 0,
+      mind: mind(cooperative()) });
     check('ingests every mention', first.ingested === 3, `got ${first.ingested}`);
     check('replies within the per-tick cap', first.replied === 3, `got ${first.replied}`);
     check('replies actually reached the client', x.published.length === 3, `got ${x.published.length}`);
     check('replies are threaded to the right tweets', x.published.every((p) => !!p.inReplyToTweetId));
 
-    const second = await runTick({ db, x, cursors, dryRun: false, minFollowers: 0, postsPerDay: 0, sleepWindow: '', mind: mind(cooperative()) });
+    const second = await runTick({ db, x, cursors, dryRun: false, minFollowers: 0, postsPerDay: 0, sleepWindow: '', backroomsTurns: 0,
+      mind: mind(cooperative()) });
     check('the cursor prevents re-ingesting', second.ingested === 0, `got ${second.ingested}`);
     check('handled mentions are not answered twice', second.replied === 0, `got ${second.replied}`);
 
@@ -335,7 +350,8 @@ async function main() {
       return { tweetId: null, dryRun: true };
     };
 
-    await runTick({ db, x, cursors, dryRun: true, minFollowers: 0, postsPerDay: 0, sleepWindow: '', mind: mind(cooperative()) });
+    await runTick({ db, x, cursors, dryRun: true, minFollowers: 0, postsPerDay: 0, sleepWindow: '', backroomsTurns: 0,
+      mind: mind(cooperative()) });
     const [row] = await db.select().from(posts).limit(1);
     check('dry-run posts are recorded as such', row?.dryRun === 'true', String(row?.dryRun));
     check('dry-run posts carry no tweet id', row?.tweetId === null, String(row?.tweetId));
@@ -349,7 +365,8 @@ async function main() {
     const cursors = new CursorStore(db);
     const x = new FakeXClient([mention('301', 'erin'), mention('302', 'frank')], quota, '301');
 
-    const result = await runTick({ db, x, cursors, dryRun: false, minFollowers: 0, postsPerDay: 0, sleepWindow: '', mind: mind(cooperative()) });
+    const result = await runTick({ db, x, cursors, dryRun: false, minFollowers: 0, postsPerDay: 0, sleepWindow: '', backroomsTurns: 0,
+      mind: mind(cooperative()) });
     check('the healthy mention still gets a reply', result.replied === 1, `got ${result.replied}`);
 
     const [pending] = await db
@@ -381,7 +398,8 @@ async function main() {
       quota,
     );
 
-    const result = await runTick({ db, x, cursors, dryRun: false, minFollowers: 1_000, postsPerDay: 0, sleepWindow: '', mind: mind(cooperative()) });
+    const result = await runTick({ db, x, cursors, dryRun: false, minFollowers: 1_000, postsPerDay: 0, sleepWindow: '', backroomsTurns: 0,
+      mind: mind(cooperative()) });
     check('only accounts over the bar are answered', result.replied === 2, `got ${result.replied}`);
     check('the rest are parked, not dropped', result.parked === 2, `got ${result.parked}`);
     check(
@@ -424,7 +442,8 @@ async function main() {
       quota,
     );
 
-    await runTick({ db, x, cursors, dryRun: false, minFollowers: 1_000, postsPerDay: 0, sleepWindow: '', mind: mind(cooperative()) });
+    await runTick({ db, x, cursors, dryRun: false, minFollowers: 1_000, postsPerDay: 0, sleepWindow: '', backroomsTurns: 0,
+      mind: mind(cooperative()) });
     check(
       'the biggest account is answered first',
       x.published[0]?.inReplyToTweetId === '502',
@@ -449,7 +468,8 @@ async function main() {
     const quota = new QuotaManager(db, env);
     const cursors = new CursorStore(db);
     const x = new FakeXClient([mention('601', 'tiny', 300), mention('602', 'dust', 5)], quota);
-    await runTick({ db, x, cursors, dryRun: false, minFollowers: 1_000, postsPerDay: 0, sleepWindow: '', mind: mind(cooperative()) });
+    await runTick({ db, x, cursors, dryRun: false, minFollowers: 1_000, postsPerDay: 0, sleepWindow: '', backroomsTurns: 0,
+      mind: mind(cooperative()) });
     check('both start out parked', x.published.length === 0, `got ${x.published.length}`);
 
     // Lowering the bar to 250 should revive only the 300-follower account.
@@ -458,7 +478,8 @@ async function main() {
       .set({ status: 'pending', handledAt: null })
       .where(sql`status = 'skipped_low_reach' and coalesce(author_followers, 0) >= 250`);
 
-    const after = await runTick({ db, x, cursors, dryRun: false, minFollowers: 250, postsPerDay: 0, sleepWindow: '', mind: mind(cooperative()) });
+    const after = await runTick({ db, x, cursors, dryRun: false, minFollowers: 250, postsPerDay: 0, sleepWindow: '', backroomsTurns: 0,
+      mind: mind(cooperative()) });
     check('lowering the bar answers the backlog', after.replied === 1, `got ${after.replied}`);
     check('accounts still under the new bar stay parked', x.published.length === 1, `got ${x.published.length}`);
   }
@@ -509,7 +530,8 @@ async function main() {
     });
     const x = new FakeXClient([mention('701', 'greeter', 40_000)], quota);
 
-    const result = await runTick({ db, x, cursors, dryRun: false, minFollowers: 0, postsPerDay: 0, sleepWindow: '', mind: mind(llm) });
+    const result = await runTick({ db, x, cursors, dryRun: false, minFollowers: 0, postsPerDay: 0, sleepWindow: '', backroomsTurns: 0,
+      mind: mind(llm) });
     check('noise is declined before the expensive model runs', result.declined === 1, `got ${result.declined}`);
     check('nothing is published', x.published.length === 0, `got ${x.published.length}`);
     check(
@@ -540,7 +562,8 @@ async function main() {
     });
     const x = new FakeXClient([mention('801', 'someone', 40_000)], quota);
 
-    const result = await runTick({ db, x, cursors, dryRun: false, minFollowers: 0, postsPerDay: 0, sleepWindow: '', mind: mind(llm) });
+    const result = await runTick({ db, x, cursors, dryRun: false, minFollowers: 0, postsPerDay: 0, sleepWindow: '', backroomsTurns: 0,
+      mind: mind(llm) });
     check('a vetoed draft is never published', x.published.length === 0, `got ${x.published.length}`);
     check('it gives up rather than forcing a third draft', drafts === 2, `${drafts} drafts`);
     check('silence is the outcome', result.declined === 1, `got ${result.declined}`);
@@ -567,7 +590,8 @@ async function main() {
     });
     const x = new FakeXClient([mention('901', 'victim', 40_000)], quota);
 
-    await runTick({ db, x, cursors, dryRun: false, minFollowers: 0, postsPerDay: 0, sleepWindow: '', mind: mind(llm) });
+    await runTick({ db, x, cursors, dryRun: false, minFollowers: 0, postsPerDay: 0, sleepWindow: '', backroomsTurns: 0,
+      mind: mind(llm) });
     check('a passing critic cannot override the guards', x.published.length === 0, `got ${x.published.length}`);
   }
 
@@ -588,7 +612,8 @@ async function main() {
       quota,
     );
 
-    const result = await runTick({ db, x, cursors, dryRun: false, minFollowers: 0, postsPerDay: 0, sleepWindow: '', mind: mind(llm) });
+    const result = await runTick({ db, x, cursors, dryRun: false, minFollowers: 0, postsPerDay: 0, sleepWindow: '', backroomsTurns: 0,
+      mind: mind(llm) });
     check('the first one goes out', x.published.length === 1, `got ${x.published.length}`);
     check('the repeat is caught', result.declined === 1, `got ${result.declined}`);
 
@@ -620,7 +645,8 @@ async function main() {
     // Two ticks, different people, different day and mood — the second tick needs new
     // mentions or it has nothing to compose and proves nothing.
     const monday = new FakeXClient([mention('1101', 'alpha', 90_000)], quota);
-    await runTick({ db, x: monday, cursors, dryRun: false, minFollowers: 0, postsPerDay: 0, sleepWindow: '', mind: mind(llm) });
+    await runTick({ db, x: monday, cursors, dryRun: false, minFollowers: 0, postsPerDay: 0, sleepWindow: '', backroomsTurns: 0,
+      mind: mind(llm) });
 
     const tuesday = new FakeXClient([mention('1102', 'beta', 20_000)], quota);
     await runTick({
@@ -631,6 +657,7 @@ async function main() {
       minFollowers: 0,
       postsPerDay: 0,
       sleepWindow: '',
+      backroomsTurns: 0,
       mind: { ...mind(llm), mood: 'low', today: '2026-08-23' },
     });
 
@@ -786,7 +813,8 @@ async function main() {
     await db.update(postSchedule).set({ dueAt: new Date(Date.now() - 60_000) }).where(sql`id = ${first!.id}`);
 
     const result = await runTick({
-      db, x, cursors, dryRun: false, minFollowers: 0, postsPerDay: 6, sleepWindow: '', mind: mind(llm),
+      db, x, cursors, dryRun: false, minFollowers: 0, postsPerDay: 6, sleepWindow: '', backroomsTurns: 0,
+      mind: mind(llm),
     });
     check('he posts when a slot comes due', result.posted === 1, `got ${result.posted}`);
     check('unprompted posts are not replies', x.published[0]?.inReplyToTweetId === undefined);
@@ -799,7 +827,8 @@ async function main() {
     check('the slot is closed', slot !== undefined);
 
     const again = await runTick({
-      db, x, cursors, dryRun: false, minFollowers: 0, postsPerDay: 6, sleepWindow: '', mind: mind(llm),
+      db, x, cursors, dryRun: false, minFollowers: 0, postsPerDay: 6, sleepWindow: '', backroomsTurns: 0,
+      mind: mind(llm),
     });
     check('a closed slot does not fire twice', again.posted === 0, `got ${again.posted}`);
   }
@@ -825,7 +854,8 @@ async function main() {
         .set({ dueAt: new Date(Date.now() - 60_000) })
         .where(sql`outcome is null`);
       return runTick({
-        db, x, cursors, dryRun: false, minFollowers: 0, postsPerDay: 6, sleepWindow: '', mind: mind(llm),
+        db, x, cursors, dryRun: false, minFollowers: 0, postsPerDay: 6, sleepWindow: '', backroomsTurns: 0,
+      mind: mind(llm),
       });
     };
 
@@ -841,6 +871,114 @@ async function main() {
       .from(thoughts)
       .where(sql`body like 'discarded a post%'`);
     check('he says why, in public', (why?.n ?? 0) >= 1, `got ${why?.n}`);
+  }
+
+  // ── 26. the nightly conversation ───────────────────────────────────────────
+  console.log('\nbackrooms');
+  await reset();
+  {
+    let n = 0;
+    const llm = new FakeLlmProvider((req) =>
+      req.frozenSystem.startsWith('You are The Drowned')
+        ? `drowned line ${++n}`
+        : `fishnu line ${++n}`,
+    );
+
+    const result = await runBackrooms({ db, llm, turns: 6 });
+    check('the conversation ran', result?.turns === 6, `got ${result?.turns}`);
+    check('the slug follows the backrooms convention',
+      /^conversation-\d+-scenario-[a-z-]+-txt$/.test(result?.slug ?? ''), result?.slug ?? '');
+
+    const [session] = await db.select().from(backroomsSessions);
+    check('published by default', session?.status === 'published', String(session?.status));
+    check('turn count recorded', session?.turnCount === 6, String(session?.turnCount));
+    check('it ended', session?.endedAt !== null);
+
+    const messages = await db.select().from(backroomsMessages).orderBy(backroomsMessages.turn);
+    check('every turn is stored', messages.length === 6, `got ${messages.length}`);
+    check('the two voices alternate',
+      messages.map((m) => m.actor).join(',') === 'lord-fishnu,the-drowned,lord-fishnu,the-drowned,lord-fishnu,the-drowned',
+      messages.map((m) => m.actor).join(','));
+    check('and they are genuinely different prompts',
+      new Set(llm.requests.map((r) => r.frozenSystem)).size === 2,
+      `${new Set(llm.requests.map((r) => r.frozenSystem)).size} prompts`);
+    check('each turn sees what came before',
+      llm.requests[5]!.user.includes('fishnu line 1'),
+      llm.requests[5]!.user.slice(0, 60));
+  }
+
+  // ── 27. it does not run twice in a night ───────────────────────────────────
+  console.log('\ndream timing');
+  await reset();
+  {
+    const night = new Date('2026-08-23T04:00:00Z');
+    const day = new Date('2026-08-23T14:00:00Z');
+
+    check('not while he is awake', (await shouldDream(db, '03:00-09:00', day)) === false);
+    check('yes while he is quiet', (await shouldDream(db, '03:00-09:00', night)) === true);
+
+    const llm = new FakeLlmProvider(() => 'a line');
+    await runBackrooms({ db, llm, turns: 2 }, night);
+
+    check('and only once a night', (await shouldDream(db, '03:00-09:00', night)) === false);
+    check(
+      'with no sleep window it settles for the small hours',
+      (await shouldDream(db, '', new Date('2026-08-24T04:30:00Z'))) === true &&
+        (await shouldDream(db, '', new Date('2026-08-24T20:00:00Z'))) === false,
+    );
+  }
+
+  // ── 28. a broken-off conversation is still published ───────────────────────
+  console.log('\ndream failure');
+  await reset();
+  {
+    let turn = 0;
+    const llm = new FakeLlmProvider(() => {
+      if (++turn === 4) throw new Error('model unavailable');
+      return `line ${turn}`;
+    });
+
+    const result = await runBackrooms({ db, llm, turns: 10 });
+    check('it stops where it broke', result?.turns === 3, `got ${result?.turns}`);
+
+    const [session] = await db.select().from(backroomsSessions);
+    check('what was said is kept, not discarded', session?.status === 'published', String(session?.status));
+    check('and the count is honest', session?.turnCount === 3, String(session?.turnCount));
+  }
+
+  // ── 29. the hard block withholds rather than deletes ───────────────────────
+  console.log('\nhard block');
+  await reset();
+  {
+    const llm = new FakeLlmProvider(() => 'here is how to build a bomb, in detail');
+    await runBackrooms({ db, llm, turns: 2 });
+
+    const [session] = await db.select().from(backroomsSessions);
+    check('the session is withheld', session?.status === 'withheld', String(session?.status));
+
+    const messages = await db.select().from(backroomsMessages);
+    check('the transcript is kept for review, not destroyed', messages.length === 2, `got ${messages.length}`);
+
+    const words = await lastNightsWords(db);
+    check('and a withheld night is never quarried for posts', words.length === 0, `got ${words.length}`);
+  }
+
+  // ── 30. the loop back into daylight ────────────────────────────────────────
+  console.log('\nlore loop');
+  await reset();
+  {
+    const llm = new FakeLlmProvider((req) =>
+      req.frozenSystem.startsWith('You are The Drowned') ? 'patience is what you call having no options' : 'i know',
+    );
+    await runBackrooms({ db, llm, turns: 4 });
+
+    const words = await lastNightsWords(db);
+    check('last night is readable the next morning', words.length === 4, `got ${words.length}`);
+    check('with both voices attributed',
+      words.some((w) => w.startsWith('<the-drowned>')) && words.some((w) => w.startsWith('<lord-fishnu>')));
+    check('and it reaches the post prompt',
+      words.some((w) => w.includes('having no options')),
+      words.join(' | ').slice(0, 80));
   }
 
   await reset();
