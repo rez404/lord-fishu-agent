@@ -91,7 +91,7 @@ fi
 # nightly conversations all work without it, and waiting for API approval to bring any of
 # them up would be a choice rather than a constraint.
 x_missing=""
-for key in X_APP_KEY X_APP_SECRET X_ACCESS_TOKEN X_ACCESS_SECRET X_USER_ID; do
+for key in X_APP_KEY X_APP_SECRET X_ACCESS_TOKEN X_ACCESS_SECRET; do
   unset_key "$key" && x_missing="$x_missing $key"
 done
 if [ -n "$x_missing" ]; then

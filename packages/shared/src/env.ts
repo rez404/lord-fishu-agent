@@ -124,9 +124,9 @@ export type Env = z.infer<typeof schema>;
 
 /** Whether the agent can reach X at all. Everything timeline-shaped is gated on this. */
 export function hasXCredentials(env: Env): boolean {
-  return Boolean(
-    env.X_APP_KEY && env.X_APP_SECRET && env.X_ACCESS_TOKEN && env.X_ACCESS_SECRET && env.X_USER_ID,
-  );
+  // X_USER_ID is deliberately not required: the four keys are what authenticate, and the
+  // account tells the agent its own numeric id at startup.
+  return Boolean(env.X_APP_KEY && env.X_APP_SECRET && env.X_ACCESS_TOKEN && env.X_ACCESS_SECRET);
 }
 export type ApiEnv = z.infer<typeof apiSchema>;
 export type ToolEnv = z.infer<typeof toolSchema>;

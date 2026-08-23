@@ -43,11 +43,21 @@ async function main() {
 
   if (xEnabled) {
     const me = await x.me();
-    if (me.id !== env.X_USER_ID) {
+
+    if (env.X_USER_ID && me.id !== env.X_USER_ID) {
+      // A mismatch means the keys belong to a different account than the one configured,
+      // and posting as the wrong account is not something to discover afterwards.
       throw new Error(
         `X_USER_ID (${env.X_USER_ID}) does not match the authenticated account (${me.id}/@${me.username})`,
       );
     }
+    if (!env.X_USER_ID) {
+      // The numeric id is not shown anywhere obvious in the developer portal, and the
+      // account will tell us its own. Adopt it rather than making someone go and find it.
+      env.X_USER_ID = me.id;
+      logger.info({ userId: me.id }, 'X_USER_ID was not set — adopted from the authenticated account');
+    }
+
     logger.info(
       { account: `@${me.username}`, dryRun: env.DRY_RUN, minFollowers: await settingsStore.replyMinFollowers() },
       'Lord Fishnu is awake',

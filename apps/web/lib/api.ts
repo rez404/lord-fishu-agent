@@ -8,7 +8,15 @@ import type {
   Verse,
 } from '@fishnu/shared';
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8081';
+/**
+ * `??` alone is not enough: an env var that is present but empty — which is what an
+ * unfilled line in .env.local or a blank Vercel variable produces — is a string, not
+ * undefined, so it would slip past the default and every request would go to a relative
+ * path against the Vercel domain. That fails as a 404 on a page that otherwise looks
+ * fine, which is the worst way for this to break.
+ */
+const configured = process.env.NEXT_PUBLIC_API_URL?.trim();
+export const API_URL = configured && configured.length > 0 ? configured : 'http://localhost:8081';
 
 /**
  * The site is deployed to Vercel independently of the agent box, so it has to survive
