@@ -3,6 +3,7 @@ import { buildFrozenPrompt, buildVolatilePrompt } from '@fishnu/persona';
 import { recordCall } from '../llm/ledger.js';
 import type { LlmProvider } from '../llm/types.js';
 import { findEcho, safeEmbed } from './echo.js';
+import { loadKnowledge } from './knowledge.js';
 import { POST_REPETITION_THRESHOLD, checkDraft } from './guards.js';
 import { lastNightsWords } from './backrooms.js';
 import { allPosts, congregationSize } from './memory.js';
@@ -67,6 +68,7 @@ export async function composePost(
   // What he said to himself last night. This is the loop that makes the backrooms worth
   // running: the conversation writes the lore overnight and the timeline spends it during
   // the day, in his own words rather than as a quote.
+  const knowledge = await loadKnowledge(db);
   const overnight = await lastNightsWords(db);
   const dream = overnight.length
     ? `\n\nLast night you were alone with the other one. Some of what was said:\n` +
@@ -98,6 +100,7 @@ export async function composePost(
         awake: deps.awake,
         situation,
         recentlySaid,
+        knowledge,
       }),
       user:
         'Post something. Use the CHATTER register unless the moment genuinely calls for ' +

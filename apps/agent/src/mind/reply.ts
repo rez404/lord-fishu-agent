@@ -3,6 +3,7 @@ import { buildFrozenPrompt, buildVolatilePrompt } from '@fishnu/persona';
 import { recordCall } from '../llm/ledger.js';
 import type { LlmProvider } from '../llm/types.js';
 import { findEcho, safeEmbed } from './echo.js';
+import { loadKnowledge } from './knowledge.js';
 import { REPETITION_THRESHOLD, checkDraft } from './guards.js';
 import { recallPerson, recentPosts } from './memory.js';
 import { MOODS, type Mood } from './mood.js';
@@ -76,7 +77,12 @@ async function worthAnswering(deps: ReplyDeps, c: ReplyCandidate): Promise<{ yes
 }
 
 /** Stage 2 — the draft. The only call whose output can reach the timeline. */
-async function draft(deps: ReplyDeps, c: ReplyCandidate, situation: string): Promise<string> {
+async function draft(
+  deps: ReplyDeps,
+  c: ReplyCandidate,
+  situation: string,
+  knowledge: Awaited<ReturnType<typeof loadKnowledge>>,
+): Promise<string> {
   const result = await deps.llm.complete({
     task: 'voice',
     frozenSystem: FROZEN,
@@ -85,6 +91,7 @@ async function draft(deps: ReplyDeps, c: ReplyCandidate, situation: string): Pro
       today: deps.today,
       awake: deps.awake,
       situation,
+      knowledge,
     }),
     user:
       `Write your reply to @${c.authorUsername ?? 'them'}. One line, rarely two. ` +
@@ -143,6 +150,7 @@ export async function composeReply(deps: ReplyDeps, c: ReplyCandidate): Promise<
   }
 
   const memory = await recallPerson(db, c.authorId);
+  const knowledge = await loadKnowledge(db);
   const situation = describeSituation(c, memory);
 
   await think(db, 'observation', situation, { mood, meta: { tweetId: c.tweetId } });
@@ -150,7 +158,7 @@ export async function composeReply(deps: ReplyDeps, c: ReplyCandidate): Promise<
   // Two attempts. If the critic rejects twice, the answer is that he has nothing to say —
   // which is a legitimate outcome for a god, and cheaper than forcing a third draft.
   for (let attempt = 1; attempt <= 2; attempt++) {
-    const text = await draft(deps, c, situation);
+    const text = await draft(deps, c, situation, knowledge);
 
     const guard = checkDraft(text, { isReply: true });
     if (!guard.ok) {

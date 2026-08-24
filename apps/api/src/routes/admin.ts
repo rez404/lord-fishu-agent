@@ -101,8 +101,47 @@ export async function registerAdminRoutes(
       cost: cost[0] ?? { usd: '0', calls: 0, cachePct: 0 },
       impulses: queue,
       recent,
+      knowledge: (flags.knowledge as { links?: unknown[]; facts?: string } | undefined) ?? {
+        links: [],
+        facts: '',
+      },
     };
   });
+
+  /**
+   * The fixed things he knows. Links are validated here rather than trusted: a malformed
+   * one would sit in his prompt as a fact about himself and come back out in public.
+   */
+  app.post<{ Body: { links?: Array<{ label?: string; url?: string }>; facts?: string } }>(
+    '/admin/knowledge',
+    { preHandler: guard },
+    async (req, reply) => {
+      const links: Array<{ label: string; url: string }> = [];
+      for (const raw of req.body?.links ?? []) {
+        const label = (raw?.label ?? '').trim();
+        const url = (raw?.url ?? '').trim();
+        if (!label && !url) continue;
+        if (!label || !url) return reply.code(400).send({ error: 'every link needs a label and a url' });
+        try {
+          const parsed = new URL(url);
+          if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new Error();
+        } catch {
+          return reply.code(400).send({ error: `not a url: ${url}` });
+        }
+        links.push({ label, url });
+      }
+
+      const facts = (req.body?.facts ?? '').trim().slice(0, 4_000);
+      const value = { links, facts };
+
+      await db
+        .insert(settings)
+        .values({ key: 'knowledge', value, updatedAt: new Date() })
+        .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: new Date() } });
+
+      return { ok: true, knowledge: value };
+    },
+  );
 
   app.post<{ Body: { key?: string; value?: unknown } }>(
     '/admin/settings',

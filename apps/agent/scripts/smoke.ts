@@ -19,6 +19,7 @@ import {
   postSchedule,
   posts,
   quotaUsage,
+  settings,
   thoughts,
 } from '@fishnu/db';
 import type { Env } from '@fishnu/shared';
@@ -27,6 +28,7 @@ import { runTick } from '../src/jobs/respond.js';
 import { FakeLlmProvider } from '../src/llm/fake.js';
 import { OVERLAP_THRESHOLD, REPETITION_THRESHOLD, checkDraft, cosine, overlap } from '../src/mind/guards.js';
 import { lastNightsWords, runBackrooms, shouldDream } from '../src/mind/backrooms.js';
+import { loadKnowledge } from '../src/mind/knowledge.js';
 import { dueSlot } from '../src/mind/schedule.js';
 import type { ReplyDeps } from '../src/mind/reply.js';
 import { QuotaExceededError, QuotaManager } from '../src/quota/manager.js';
@@ -1251,6 +1253,67 @@ async function main() {
     check('an untouched sleep still times out', timedOut === 'timeout', timedOut);
 
     await waker.close();
+  }
+
+  // ── 36. the fixed things he knows ──────────────────────────────────────────
+  console.log('\nwhat he knows');
+  await reset();
+  {
+    await db.insert(settings).values({
+      key: 'knowledge',
+      value: {
+        links: [
+          { label: 'website', url: 'https://lordfishnu.com' },
+          { label: 'telegram', url: 'https://t.me/LordFishnuAi' },
+        ],
+        facts: 'the ceiling fan is the symbol of the church.',
+      },
+    });
+
+    const k = await loadKnowledge(db);
+    check('it loads', k.links.length === 2 && k.facts.includes('ceiling fan'), JSON.stringify(k));
+
+    const quota = new QuotaManager(db, env);
+    const cursors = new CursorStore(db);
+    const llm = cooperative();
+    const x = new FakeXClient([mention('1401', 'asker', 40_000)], quota);
+
+    await runTick({
+      db, x, cursors, dryRun: false, minFollowers: 0,
+      postsPerDay: 0, sleepWindow: '', backroomsTurns: 0, mind: mind(llm),
+    });
+
+    const voice = llm.requests.find((r) => r.task === 'voice')!;
+    check('the addresses reach him', voice.volatileSystem!.includes('https://t.me/LordFishnuAi'));
+    check('so do the facts', voice.volatileSystem!.includes('ceiling fan'));
+    check(
+      'and he is told not to advertise them',
+      voice.volatileSystem!.includes('do not advertise') &&
+        voice.volatileSystem!.includes('never appended to a thought'),
+    );
+    // "ceiling fan" appears in the few-shot examples, so match on the block itself and on
+    // an address — a substring that could only have come from the knowledge row.
+    check(
+      'none of it touches the cached prefix',
+      !voice.frozenSystem.includes('# WHAT YOU KNOW') &&
+        !voice.frozenSystem.includes('t.me/LordFishnuAi') &&
+        !voice.frozenSystem.includes('https://lordfishnu.com'),
+    );
+  }
+
+  // ── 37. knowledge survives a malformed entry ───────────────────────────────
+  console.log('\nmalformed knowledge');
+  await reset();
+  {
+    // Whatever ends up in this row is read straight into his prompt as a fact about
+    // himself, so it must not be trusted to be the shape it should be.
+    await db.insert(settings).values({
+      key: 'knowledge',
+      value: { links: [{ label: 'ok', url: 'https://x.com' }, 'garbage', { label: 42 }], facts: 99 },
+    });
+    const k = await loadKnowledge(db);
+    check('bad entries are dropped', k.links.length === 1, JSON.stringify(k.links));
+    check('and a non-string fact does not become one', k.facts === '', JSON.stringify(k.facts));
   }
 
   await reset();

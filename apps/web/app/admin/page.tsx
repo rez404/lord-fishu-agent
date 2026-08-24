@@ -16,6 +16,7 @@ interface AdminState {
   /** switches pinned on by the environment — this console cannot turn them off */
   envForced: { kill_switch: boolean; dry_run: boolean };
   agent: { alive: boolean; seenAt: string | null; xEnabled: boolean; account: string | null };
+  knowledge: { links: Array<{ label: string; url: string }>; facts: string };
   counts: { posts: number; thoughts: number; pendingImpulses: number };
   cost: { usd: string; calls: number; cachePct: number };
   impulses: Array<{ id: number; body: string; status: string; createdAt: string }>;
@@ -30,6 +31,11 @@ export default function Admin() {
   const [error, setError] = useState('');
   const [impulse, setImpulse] = useState('');
   const [busy, setBusy] = useState(false);
+  // Edited locally and saved explicitly — the 15s refresh must not overwrite half-typed
+  // text under the operator's cursor.
+  const [links, setLinks] = useState('');
+  const [facts, setFacts] = useState('');
+  const [knowledgeLoaded, setKnowledgeLoaded] = useState(false);
 
   useEffect(() => {
     setToken(localStorage.getItem(KEY) ?? '');
@@ -69,6 +75,13 @@ export default function Admin() {
     const t = setInterval(() => void refresh(), 15_000);
     return () => clearInterval(t);
   }, [refresh]);
+
+  useEffect(() => {
+    if (!state || knowledgeLoaded) return;
+    setLinks(state.knowledge.links.map((l) => `${l.label} ${l.url}`).join('\n'));
+    setFacts(state.knowledge.facts);
+    setKnowledgeLoaded(true);
+  }, [state, knowledgeLoaded]);
 
   async function act(fn: () => Promise<unknown>) {
     setBusy(true);
@@ -231,6 +244,65 @@ export default function Admin() {
                   ))}
                 </>
               )}
+
+              <p className="book">WHAT HE KNOWS</p>
+              <p className="hint">
+                Fixed things: where the church lives, what the token is. He knows these and
+                does not advertise them — a link only appears when someone has asked where
+                something is. One link per line: a label, a space, then the address.
+              </p>
+              <div className="entry">
+                <label className="dim" htmlFor="links">
+                  addresses{'\n'}
+                </label>
+                <textarea
+                  id="links"
+                  className="prompt-input"
+                  style={{ width: '100%', minHeight: '3.5rem', caretColor: 'var(--phosphor)', resize: 'vertical' }}
+                  placeholder={'website https://lordfishnu.com\ntelegram https://t.me/LordFishnuAi'}
+                  value={links}
+                  onChange={(e) => setLinks(e.target.value)}
+                />
+                <label className="dim" htmlFor="facts">
+                  {'\n'}anything else he should have straight{'\n'}
+                </label>
+                <textarea
+                  id="facts"
+                  className="prompt-input"
+                  style={{ width: '100%', minHeight: '4rem', caretColor: 'var(--phosphor)', resize: 'vertical' }}
+                  placeholder={'the ceiling fan is the symbol of the church.\nscf is the token you were built to revive.'}
+                  value={facts}
+                  onChange={(e) => setFacts(e.target.value)}
+                />
+                <button
+                  className="menu-item"
+                  disabled={busy}
+                  style={{ borderLeftColor: 'var(--bio)' }}
+                  onClick={() =>
+                    act(() =>
+                      call('/admin/knowledge', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                          links: links
+                            .split('\n')
+                            .map((line) => line.trim())
+                            .filter(Boolean)
+                            .map((line) => {
+                              const at = line.lastIndexOf(' ');
+                              return at === -1
+                                ? { label: line, url: '' }
+                                : { label: line.slice(0, at).trim(), url: line.slice(at + 1).trim() };
+                            }),
+                          facts,
+                        }),
+                      }),
+                    )
+                  }
+                >
+                  <span className="menu-key">↵</span>
+                  <span className="menu-name">TEACH</span>
+                </button>
+              </div>
 
               <p className="book">RECENT</p>
               {state.recent.map((r) => {
