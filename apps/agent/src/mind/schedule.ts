@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, lte, sql } from 'drizzle-orm';
 import type { Db } from '@fishnu/db';
 import { postSchedule } from '@fishnu/db';
 import { dayKey, inSleepWindow, logger } from '@fishnu/shared';
@@ -33,7 +33,24 @@ export const ANGLES = [
   'nothing in particular. a post that refuses to be content.',
 ] as const;
 
-const MIN_GAP_MINUTES = 35;
+/**
+ * The floor between two things he says unprompted.
+ *
+ * Held across the day boundary as well as within a day: the last slot of one plan
+ * constrains the first slot of the next, or a 23:50 and a 00:10 sit next to each other on
+ * the timeline looking like a machine that reset at midnight.
+ */
+const MIN_GAP_MINUTES = 180;
+
+/**
+ * How late a slot may fire before it is dropped instead.
+ *
+ * A slot means "speak around this time", not "you owe a post". Without this, anything
+ * that stops him for a few hours — a restart, the kill switch, dry run being lifted, an
+ * outage — turns into a burst of back-to-back posts the moment he resumes, which is the
+ * single most recognisable thing an automated account does. Missed time is missed.
+ */
+const STALE_AFTER_MINUTES = 90;
 
 export interface PlannedSlot {
   id: number;
@@ -53,17 +70,38 @@ export async function dueSlot(
   const now = opts.now ?? new Date();
   const day = dayKey(now);
 
-  await ensurePlan(db, day, opts.postsPerDay, opts.sleepWindow);
+  await ensurePlan(db, day, opts.postsPerDay, opts.sleepWindow, now);
 
-  const [slot] = await db
+  // Every slot whose time has passed, oldest first — not just the first one, because the
+  // stale ones have to be cleared rather than queued behind.
+  const due = await db
     .select()
     .from(postSchedule)
-    .where(and(eq(postSchedule.dayKey, day), isNull(postSchedule.outcome), lte(postSchedule.dueAt, now)))
-    .orderBy(asc(postSchedule.dueAt))
-    .limit(1);
+    .where(and(isNull(postSchedule.outcome), lte(postSchedule.dueAt, now)))
+    .orderBy(asc(postSchedule.dueAt));
 
-  if (!slot) return null;
-  return { id: slot.id, slot: slot.slot, angle: slot.angle, dueAt: slot.dueAt };
+  const staleBefore = new Date(now.getTime() - STALE_AFTER_MINUTES * 60_000);
+  let dropped = 0;
+
+  for (const slot of due) {
+    if (slot.dueAt < staleBefore) {
+      await db
+        .update(postSchedule)
+        .set({ outcome: 'skipped', postedAt: now })
+        .where(eq(postSchedule.id, slot.id));
+      dropped += 1;
+      continue;
+    }
+    if (dropped > 0) {
+      logger.info({ dropped }, 'dropped slots that went stale — he does not catch up');
+    }
+    return { id: slot.id, slot: slot.slot, angle: slot.angle, dueAt: slot.dueAt };
+  }
+
+  if (dropped > 0) {
+    logger.info({ dropped }, 'dropped slots that went stale — he does not catch up');
+  }
+  return null;
 }
 
 export async function closeSlot(
@@ -78,14 +116,28 @@ export async function closeSlot(
     .where(eq(postSchedule.id, slotId));
 }
 
-async function ensurePlan(db: Db, day: string, postsPerDay: number, sleepWindow: string): Promise<void> {
+async function ensurePlan(
+  db: Db,
+  day: string,
+  postsPerDay: number,
+  sleepWindow: string,
+  now: Date,
+): Promise<void> {
   const [existing] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(postSchedule)
     .where(eq(postSchedule.dayKey, day));
   if ((existing?.n ?? 0) > 0) return;
 
-  const slots = drawSlots(day, postsPerDay, sleepWindow);
+  // The previous plan's last slot is a floor for this one — days are planned separately
+  // but the timeline does not care where one ends and the next begins.
+  const [previous] = await db
+    .select({ at: postSchedule.dueAt })
+    .from(postSchedule)
+    .orderBy(desc(postSchedule.dueAt))
+    .limit(1);
+
+  const slots = drawSlots(day, postsPerDay, sleepWindow, now, previous?.at ?? null);
   if (slots.length === 0) {
     logger.warn({ day, sleepWindow }, 'no postable minutes in the day — check SLEEP_WINDOW_UTC');
     return;
@@ -116,22 +168,64 @@ async function ensurePlan(db: Db, day: string, postsPerDay: number, sleepWindow:
  * Seeded by the UTC date so that two workers racing to plan the same day produce the same
  * plan — the unique index makes the race harmless either way, but identical output means
  * the loser's insert is a genuine no-op rather than a different schedule half-applied.
+ *
+ * A day first planned partway through — a deployment at 23:56, say — must only draw from
+ * the time that is left. Drawing across the whole day would create slots that are overdue
+ * the moment they are written, and the agent would fire them back to back to catch up:
+ * the single most recognisable thing an automated account can do.
  */
-function drawSlots(day: string, count: number, sleepWindow: string): Date[] {
+function drawSlots(
+  day: string,
+  count: number,
+  sleepWindow: string,
+  now: Date,
+  notBefore: Date | null,
+): Date[] {
   const rand = seeded(hash(day));
   const base = new Date(`${day}T00:00:00.000Z`);
+  const isToday = day === dayKey(now);
+  const elapsed = isToday ? now.getUTCHours() * 60 + now.getUTCMinutes() : 0;
+
+  // A slot from a previous day still counts against the gap.
+  //
+  // The comparison is against the previous slot *plus the gap*, not against midnight: a
+  // 23:37 slot on the day before constrains the next morning even though it falls before
+  // this day starts. Guarding on `notBefore > base` skipped exactly that case, which is
+  // the only case this is for.
+  const floorMinute = notBefore
+    ? Math.ceil((notBefore.getTime() + MIN_GAP_MINUTES * 60_000 - base.getTime()) / 60_000)
+    : -Infinity;
 
   const awake: number[] = [];
+  let awakeAllDay = 0;
   for (let minute = 0; minute < 24 * 60; minute++) {
     const at = new Date(base.getTime() + minute * 60_000);
-    if (!inSleepWindow(sleepWindow, at)) awake.push(minute);
+    if (inSleepWindow(sleepWindow, at)) continue;
+    awakeAllDay += 1;
+    if (minute >= elapsed && minute >= floorMinute) awake.push(minute);
   }
   if (awake.length === 0) return [];
 
+  // Fewer posts in what is left of the day, in proportion to how much of it is left —
+  // otherwise a late start crams a full day's posts into the last two hours.
+  if (isToday && awakeAllDay > 0) {
+    count = Math.max(1, Math.round((count * awake.length) / awakeAllDay));
+  }
+
+  // Rejection sampling. With a three-hour floor inside an eighteen-hour day there is not
+  // much room, so this often places fewer than asked for — which is the correct outcome:
+  // the gap is a rule and the count is a target.
   const chosen: number[] = [];
-  for (let attempt = 0; attempt < count * 40 && chosen.length < count; attempt++) {
+  for (let attempt = 0; attempt < count * 200 && chosen.length < count; attempt++) {
     const minute = awake[Math.floor(rand() * awake.length)]!;
     if (chosen.every((c) => Math.abs(c - minute) >= MIN_GAP_MINUTES)) chosen.push(minute);
+  }
+
+  if (chosen.length < count) {
+    logger.info(
+      { day, asked: count, placed: chosen.length, gapMinutes: MIN_GAP_MINUTES },
+      'fewer slots than asked for — the minimum gap left no room',
+    );
   }
 
   return chosen.sort((a, b) => a - b).map((m) => new Date(base.getTime() + m * 60_000));

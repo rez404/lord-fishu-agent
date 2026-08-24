@@ -689,11 +689,15 @@ async function main() {
   await reset();
   {
     const opts = { postsPerDay: 6, sleepWindow: '03:00-09:00' };
-    const noon = new Date('2026-08-23T12:00:00Z');
+    // Planned at the start of the day, so the full count applies — planning partway
+    // through deliberately draws fewer, which the late-start section covers.
+    const noon = new Date('2026-08-23T00:00:00Z');
 
     await dueSlot(db, { ...opts, now: noon });
     const plan = await db.select().from(postSchedule).orderBy(postSchedule.slot);
-    check('the day is planned once', plan.length === 6, `got ${plan.length}`);
+    // A three-hour floor inside an eighteen-hour waking day will not fit six, and should
+    // not pretend otherwise.
+    check('the day is planned once', plan.length >= 4 && plan.length <= 6, `got ${plan.length}`);
 
     const hours = plan.map((p) => p.dueAt.getUTCHours());
     check(
@@ -704,7 +708,11 @@ async function main() {
     check('the angles are not all the same', new Set(plan.map((p) => p.angle)).size > 1);
 
     const gaps = plan.slice(1).map((p, i) => p.dueAt.getTime() - plan[i]!.dueAt.getTime());
-    check('slots are separated', gaps.every((g) => g >= 35 * 60_000), gaps.join(','));
+    check(
+      'never less than three hours apart',
+      gaps.every((g) => g >= 180 * 60_000),
+      gaps.map((g) => Math.round(g / 60_000) + 'm').join(','),
+    );
     check(
       'but not evenly — a cron job with a personality is still a cron job',
       new Set(gaps).size > 1,
@@ -715,10 +723,94 @@ async function main() {
     await dueSlot(db, { ...opts, now: noon });
     await dueSlot(db, { ...opts, now: noon });
     const after = await db.select().from(postSchedule);
-    check('replanning is a no-op', after.length === 6, `got ${after.length}`);
+    check('replanning is a no-op', after.length === plan.length, `${plan.length} -> ${after.length}`);
     check(
       'and the times are unchanged',
       after.map((p) => p.dueAt.getTime()).sort().join() === plan.map((p) => p.dueAt.getTime()).sort().join(),
+    );
+  }
+
+  // ── 20b. a day planned late does not backfill ──────────────────────────────
+  console.log('\nlate start');
+  await reset();
+  {
+    const opts = { postsPerDay: 6, sleepWindow: '03:00-09:00' };
+    // The exact case that produced five instantly-overdue slots in production: the very
+    // first plan drawn a few minutes before midnight.
+    const almostMidnight = new Date('2026-08-23T23:56:00Z');
+    await dueSlot(db, { ...opts, now: almostMidnight });
+
+    const plan = await db.select().from(postSchedule).orderBy(postSchedule.slot);
+    check('it plans something', plan.length >= 1, `got ${plan.length}`);
+    check(
+      'nothing is scheduled in the past',
+      plan.every((p) => p.dueAt >= almostMidnight),
+      plan.map((p) => p.dueAt.toISOString().slice(11, 16)).join(','),
+    );
+    check(
+      'and a sliver of a day gets a sliver of the posts',
+      plan.length < 6,
+      `${plan.length} slots for four minutes of daylight`,
+    );
+
+    // Nothing fires immediately, which is the property that matters.
+    const due = await dueSlot(db, { ...opts, now: almostMidnight });
+    check('nothing is overdue at the moment it is planned', due === null, `slot ${due?.slot}`);
+  }
+
+  // ── 20c. missed time is missed, not owed ───────────────────────────────────
+  console.log('\nno catching up');
+  await reset();
+  {
+    const opts = { postsPerDay: 6, sleepWindow: '' };
+    const start = new Date('2026-08-25T00:00:00Z');
+    await dueSlot(db, { ...opts, now: start });
+
+    // He was silent all day — dry run, an outage, the kill switch. Now it is late.
+    const lateAtNight = new Date('2026-08-25T23:30:00Z');
+    const first = await dueSlot(db, { ...opts, now: lateAtNight });
+
+    const [stillOpen] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(postSchedule)
+      .where(sql`outcome is null`);
+
+    check(
+      'at most one slot survives the gap',
+      first === null || (stillOpen?.n ?? 0) <= 1,
+      `${stillOpen?.n} still open`,
+    );
+    check(
+      'the rest are dropped, not queued',
+      (await db.select({ n: sql<number>`count(*)::int` }).from(postSchedule).where(sql`outcome = 'skipped'`))[0]!
+        .n >= 4,
+    );
+    if (first) {
+      check(
+        'and anything that does fire is recent',
+        lateAtNight.getTime() - first.dueAt.getTime() <= 90 * 60_000,
+        `${Math.round((lateAtNight.getTime() - first.dueAt.getTime()) / 60_000)} minutes late`,
+      );
+    }
+  }
+
+  // ── 20d. the gap survives midnight ─────────────────────────────────────────
+  console.log('\ngap across days');
+  await reset();
+  {
+    // With the real sleep window: a late slot on one day and an early one on the next are
+    // exactly where the constraint gets missed.
+    const opts = { postsPerDay: 6, sleepWindow: '03:00-09:00' };
+    for (const d of ['2026-09-01', '2026-09-02', '2026-09-03']) {
+      await dueSlot(db, { ...opts, now: new Date(`${d}T00:00:00Z`) });
+    }
+
+    const all = await db.select().from(postSchedule).orderBy(postSchedule.dueAt);
+    const gaps = all.slice(1).map((p, i) => p.dueAt.getTime() - all[i]!.dueAt.getTime());
+    check(
+      'the last slot of one day constrains the first of the next',
+      gaps.every((g) => g >= 180 * 60_000),
+      gaps.map((g) => Math.round(g / 60_000) + 'm').join(','),
     );
   }
 
