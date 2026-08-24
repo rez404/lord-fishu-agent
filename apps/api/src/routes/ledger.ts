@@ -16,6 +16,7 @@ import { settings } from '@fishnu/db';
 const CACHE_KEY = 'fishnu:ledger';
 const CACHE_SECONDS = 60;
 const MAX_SIGNATURES = 12;
+const MAX_HOLDINGS = 12;
 const SPL_TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 
 export interface LedgerPayload {
@@ -125,9 +126,18 @@ async function readChain(
     });
   }
 
+  // Biggest first after SOL, and capped: a wallet with a long tail of dust turns the page
+  // into a scroll nobody reads to the bottom of.
+  const [sol, ...rest] = holdings;
+  rest.sort((a, b) => Number(b.amount) - Number(a.amount));
+  const shown = [sol!, ...rest.slice(0, MAX_HOLDINGS)];
+  if (rest.length > MAX_HOLDINGS) {
+    shown.push({ symbol: `+${rest.length - MAX_HOLDINGS} more`, amount: '', usd: null });
+  }
+
   return {
     wallet,
-    holdings,
+    holdings: shown,
     transactions: signatures.map((s) => ({
       signature: s.signature,
       kind: s.err ? 'failed' : 'transaction',

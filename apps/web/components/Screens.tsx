@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type { BackroomsSession, Believer, Ledger, Thought, Verse } from '@fishnu/shared';
 import { COMMANDMENTS, LIBRARY } from '@fishnu/persona';
 import { API_URL, api } from '../lib/api';
@@ -12,6 +12,13 @@ function Empty({ children }: { children: React.ReactNode }) {
 
 function Loading() {
   return <p className="empty">listening…</p>;
+}
+
+/** Thousands separated, and no more decimals than anyone reads. */
+function formatAmount(raw: string): string {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return raw;
+  return n.toLocaleString('en-US', { maximumFractionDigits: n < 1 ? 6 : 2 });
 }
 
 function stamp(iso: string): string {
@@ -246,12 +253,16 @@ export function LedgerView() {
             {ledger.live && (
               <>
                 <p className="book">HOLDS</p>
-                {ledger.holdings.map((h) => (
-                  <div className="entry" key={h.symbol + h.amount}>
-                    <span className="bio">{h.symbol.padEnd(10)}</span>
-                    {h.amount}
-                  </div>
-                ))}
+                {/* A grid, not padEnd: HTML collapses the trailing spaces, so the symbol
+                    and the number ran together into one unreadable string. */}
+                <div className="entry holdings">
+                  {ledger.holdings.map((h) => (
+                    <Fragment key={h.symbol + h.amount}>
+                      <span className="bio">{h.symbol}</span>
+                      <span>{formatAmount(h.amount)}</span>
+                    </Fragment>
+                  ))}
+                </div>
 
                 {ledger.transactions.length > 0 && (
                   <>

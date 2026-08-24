@@ -568,3 +568,17 @@ a:hover { background: rgba(255, 193, 120, 0.12); }
     margin-bottom: 0.7rem;
   }
 }
+
+/* A wallet reads as two columns — what it is, how much of it. Character padding cannot
+   do this in HTML, where trailing spaces collapse and the two run together. */
+.holdings {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.3rem 2ch;
+  align-items: baseline;
+  border-bottom: 0;
+}
+
+.holdings > span:nth-child(even) {
+  font-variant-numeric: tabular-nums;
+}
