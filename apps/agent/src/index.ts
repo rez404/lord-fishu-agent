@@ -1,6 +1,6 @@
 import Redis from 'ioredis';
 import { createDb } from '@fishnu/db';
-import { hasXCredentials, inSleepWindow, jitter, loadEnv, logger, sleep } from '@fishnu/shared';
+import { hasXCredentials, inSleepWindow, jitter, loadEnv, logger } from '@fishnu/shared';
 import { runTick } from './jobs/respond.js';
 import { OpenAiCompatibleProvider } from './llm/provider.js';
 import { currentMood } from './mind/mood.js';
@@ -8,6 +8,7 @@ import { QuotaManager } from './quota/manager.js';
 import { CursorStore } from './runtime/cursors.js';
 import { startHealthServer, type HealthState } from './runtime/health.js';
 import { withLock } from './runtime/lock.js';
+import { Waker } from './runtime/wake.js';
 import { SettingsStore } from './runtime/settings.js';
 import { OfficialXClient } from './x/official.js';
 
@@ -17,6 +18,7 @@ async function main() {
   const env = loadEnv();
   const db = createDb(env.DATABASE_URL);
   const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: null });
+  const waker = new Waker(env.REDIS_URL);
 
   const quota = new QuotaManager(db, env);
   const settingsStore = new SettingsStore(db, env);
@@ -83,10 +85,13 @@ async function main() {
   while (running) {
     await tick(state);
     if (!running) break;
-    await sleep(jitter(env.TICK_INTERVAL_MS, env.TICK_JITTER_MS));
+
+    const how = await waker.sleep(jitter(env.TICK_INTERVAL_MS, env.TICK_JITTER_MS));
+    if (how === 'woken') logger.info('woken early — something happened');
   }
 
   health.close();
+  await waker.close();
   await redis.quit();
   logger.info('stopped');
 

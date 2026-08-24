@@ -87,6 +87,8 @@ const apiSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   DATABASE_URL: z.string().url(),
+  /** Optional: used only to wake the agent the moment an impulse is released. */
+  REDIS_URL: z.string().url().optional(),
   API_PORT: z.coerce.number().int().positive().default(8081),
   /** Bearer token for the operator routes. Unset disables them entirely. */
   ADMIN_TOKEN: z.string().optional(),

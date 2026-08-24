@@ -32,6 +32,7 @@ import type { ReplyDeps } from '../src/mind/reply.js';
 import { QuotaExceededError, QuotaManager } from '../src/quota/manager.js';
 import { CursorStore } from '../src/runtime/cursors.js';
 import { withLock } from '../src/runtime/lock.js';
+import { WAKE_CHANNEL, Waker } from '../src/runtime/wake.js';
 import { SettingsStore } from '../src/runtime/settings.js';
 import type { ReadPage, XClient, XPublishResult, XTweet, XUser } from '../src/x/types.js';
 
@@ -1227,6 +1228,29 @@ async function main() {
     const [row] = await db.select().from(impulses);
     // An operator asked for this. One bad draft is not a reason to drop it on the floor.
     check('the impulse stays pending for the next tick', row?.status === 'pending', String(row?.status));
+  }
+
+  // ── 35. released impulses do not wait for the next tick ────────────────────
+  console.log('\nwaking early');
+  {
+    const waker = new Waker(env.REDIS_URL);
+    // A subscription takes a moment to register; publishing into the void proves nothing.
+    await new Promise((r) => setTimeout(r, 300));
+
+    const started = Date.now();
+    const sleeping = waker.sleep(60_000);
+    setTimeout(() => void redis.publish(WAKE_CHANNEL, '1'), 100);
+
+    const how = await sleeping;
+    const waited = Date.now() - started;
+
+    check('the sleep is cut short', how === 'woken', how);
+    check('and it is actually early', waited < 3_000, `${waited}ms of a 60s sleep`);
+
+    const timedOut = await waker.sleep(120);
+    check('an untouched sleep still times out', timedOut === 'timeout', timedOut);
+
+    await waker.close();
   }
 
   await reset();

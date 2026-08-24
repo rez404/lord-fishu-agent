@@ -89,8 +89,11 @@ services:
       NODE_ENV: production
       API_PORT: 8081
       DATABASE_URL: postgres://${POSTGRES_USER:-fishnu}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-fishnu}
+      # Only used to wake the agent when an impulse is released.
+      REDIS_URL: redis://redis:6379
     depends_on:
       postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
 
   caddy:

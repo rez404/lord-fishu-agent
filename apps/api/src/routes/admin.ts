@@ -16,8 +16,11 @@ import { actionLog, impulses, llmCalls, posts, settings, thoughts } from '@fishn
 
 const SETTABLE = new Set(['kill_switch', 'dry_run', 'reply_min_followers']);
 
-export async function registerAdminRoutes(app: FastifyInstance, opts: { db: Db; token: string | null }) {
-  const { db, token } = opts;
+export async function registerAdminRoutes(
+  app: FastifyInstance,
+  opts: { db: Db; token: string | null; wake?: () => void },
+) {
+  const { db, token, wake } = opts;
 
   const guard = async (req: FastifyRequest, reply: FastifyReply) => {
     if (!token) {
@@ -115,6 +118,10 @@ export async function registerAdminRoutes(app: FastifyInstance, opts: { db: Db; 
       return reply.code(400).send({ error: 'between 3 and 600 characters' });
     }
     const [row] = await db.insert(impulses).values({ body }).returning({ id: impulses.id });
+    // Cut the agent's sleep short. Without this an operator watches a spinner for however
+    // long is left of the tick — up to several minutes — after telling him something
+    // happened. Best effort: if the wake never lands, the next tick picks it up anyway.
+    wake?.();
     return { ok: true, id: row?.id };
   });
 

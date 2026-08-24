@@ -1,3 +1,4 @@
+import Redis from 'ioredis';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import Fastify from 'fastify';
@@ -30,7 +31,19 @@ async function main() {
 
   await app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
   await app.register(registerRoutes, { db });
-  await app.register(registerAdminRoutes, { db, token: env.ADMIN_TOKEN ?? null });
+  // Publish-only, so no subscriber-mode restrictions apply.
+  const publisher = env.REDIS_URL ? new Redis(env.REDIS_URL, { maxRetriesPerRequest: null }) : null;
+  const wake = publisher
+    ? () => {
+        void publisher.publish('fishnu:wake', '1').catch((err) => logger.warn({ err }, 'wake failed'));
+      }
+    : undefined;
+
+  await app.register(registerAdminRoutes, { db, token: env.ADMIN_TOKEN ?? null, wake });
+
+  if (!env.REDIS_URL) {
+    logger.warn('REDIS_URL is not set — impulses will wait for the agent\'s next tick');
+  }
 
   if (!env.ADMIN_TOKEN) {
     logger.warn('ADMIN_TOKEN is not set — the operator routes are disabled');
