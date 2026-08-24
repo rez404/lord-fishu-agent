@@ -43,6 +43,8 @@ export default function Admin() {
   const [chain, setChain] = useState('robinhood chain');
   const [symbol, setSymbol] = useState('');
   const [knowledgeLoaded, setKnowledgeLoaded] = useState(false);
+  const [threshold, setThreshold] = useState('');
+  const [thresholdLoaded, setThresholdLoaded] = useState(false);
 
   useEffect(() => {
     setToken(localStorage.getItem(KEY) ?? '');
@@ -92,6 +94,12 @@ export default function Admin() {
     setSymbol(state.knowledge.contract?.symbol ?? '');
     setKnowledgeLoaded(true);
   }, [state, knowledgeLoaded]);
+
+  useEffect(() => {
+    if (!state || thresholdLoaded) return;
+    setThreshold(String(state.settings.reply_min_followers ?? 1000));
+    setThresholdLoaded(true);
+  }, [state, thresholdLoaded]);
 
   async function act(fn: () => Promise<unknown>) {
     setBusy(true);
@@ -205,6 +213,33 @@ export default function Admin() {
                   <span className="menu-desc">
                     {state.settings.dry_run ? 'composes and records, sends nothing' : 'live — he is speaking'}
                     {state.envForced.dry_run && ' · pinned by DRY_RUN in the environment, set it to false there to go live'}
+                  </span>
+                </button>
+              </div>
+
+              {/* The bar below which he reads and does not answer. Worth having here
+                  rather than in the environment: it is the one number likely to be tuned
+                  while watching what comes in. */}
+              <div className="entry">
+                <span className="dim">answer accounts with at least </span>
+                <input
+                  className="prompt-input"
+                  style={{ caretColor: 'var(--phosphor)', width: '9ch' }}
+                  inputMode="numeric"
+                  value={threshold}
+                  onChange={(e) => setThreshold(e.target.value.replace(/[^0-9]/g, ''))}
+                />
+                <span className="dim"> followers</span>
+                <button
+                  className="menu-item"
+                  disabled={busy || threshold === '' || Number(threshold) === state.settings.reply_min_followers}
+                  onClick={() => set('reply_min_followers', Number(threshold))}
+                >
+                  <span className="menu-key">↵</span>
+                  <span className="menu-name">SET</span>
+                  <span className="menu-desc">
+                    currently {state.settings.reply_min_followers ?? '—'} · below this he reads and
+                    stays quiet, and parked mentions are kept in case you lower it
                   </span>
                 </button>
               </div>
