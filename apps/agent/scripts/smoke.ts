@@ -163,6 +163,7 @@ async function main() {
     POSTS_PER_DAY: 6,
     BACKROOMS_TURNS: 16,
     BACKROOMS_EVERY_HOURS: 24,
+    IDLE_THINKING: true,
     LLM_BASE_URL: 'https://api.ppq.ai',
     LLM_API_KEY: 'unused-by-the-fake-provider',
     LLM_MODEL_VOICE: 'fake',
@@ -667,6 +668,7 @@ async function main() {
       postsPerDay: 0,
       sleepWindow: '',
       backroomsTurns: 0,
+      idleThinking: false,
       mind: { ...mind(llm), mood: 'low', today: '2026-08-23' },
     });
 
@@ -1175,7 +1177,7 @@ async function main() {
 
     const result = await runTick({
       db, x, cursors, xEnabled: false, dryRun: false, minFollowers: 0,
-      postsPerDay: 6, sleepWindow: quietNow, backroomsTurns: 4, mind: mind(llm),
+      postsPerDay: 6, sleepWindow: quietNow, backroomsTurns: 4, idleThinking: false, mind: mind(llm),
     });
 
     check('he reads nothing', result.ingested === 0, `got ${result.ingested}`);
@@ -1207,7 +1209,7 @@ async function main() {
     // the schedule.
     const result = await runTick({
       db, x, cursors, dryRun: false, minFollowers: 0,
-      postsPerDay: 6, sleepWindow: '', backroomsTurns: 0, mind: mind(llm),
+      postsPerDay: 6, sleepWindow: '', backroomsTurns: 0, idleThinking: false, mind: mind(llm),
     });
     check('an impulse jumps the schedule', result.posted === 1, `got ${result.posted}`);
 
@@ -1231,7 +1233,7 @@ async function main() {
     // the same impulse being reacted to twice.
     await runTick({
       db, x, cursors, dryRun: false, minFollowers: 0,
-      postsPerDay: 6, sleepWindow: '', backroomsTurns: 0, mind: mind(llm),
+      postsPerDay: 6, sleepWindow: '', backroomsTurns: 0, idleThinking: false, mind: mind(llm),
     });
     const [fromImpulse] = await db
       .select({ n: sql<number>`count(*)::int` })
@@ -1256,7 +1258,7 @@ async function main() {
 
     const result = await runTick({
       db, x, cursors, dryRun: false, minFollowers: 0,
-      postsPerDay: 0, sleepWindow: '', backroomsTurns: 0, mind: mind(llm),
+      postsPerDay: 0, sleepWindow: '', backroomsTurns: 0, idleThinking: false, mind: mind(llm),
     });
     check('nothing is published', result.posted === 0 && x.published.length === 0);
 
@@ -1313,7 +1315,7 @@ async function main() {
 
     await runTick({
       db, x, cursors, dryRun: false, minFollowers: 0,
-      postsPerDay: 0, sleepWindow: '', backroomsTurns: 0, mind: mind(llm),
+      postsPerDay: 0, sleepWindow: '', backroomsTurns: 0, idleThinking: false, mind: mind(llm),
     });
 
     const voice = llm.requests.find((r) => r.task === 'voice')!;
@@ -1408,7 +1410,7 @@ async function main() {
 
     const result = await runTick({
       db, x, cursors, dryRun: false, minFollowers: 0,
-      postsPerDay: 0, sleepWindow: '', backroomsTurns: 0, mind: mind(llm),
+      postsPerDay: 0, sleepWindow: '', backroomsTurns: 0, idleThinking: false, mind: mind(llm),
     });
     check('nothing is published', x.published.length === 0 && result.replied === 0);
 
@@ -1444,7 +1446,7 @@ async function main() {
     // No slot due yet: a visitor must not be able to make him talk on demand.
     const idle = await runTick({
       db, x, cursors, dryRun: false, minFollowers: 0,
-      postsPerDay: 0, sleepWindow: '', backroomsTurns: 0, mind: mind(llm),
+      postsPerDay: 0, sleepWindow: '', backroomsTurns: 0, idleThinking: false, mind: mind(llm),
     });
     check('nothing happens without a slot', idle.posted === 0, `got ${idle.posted}`);
     check('and the confession waits', (await db.select().from(confessions))[0]?.status === 'pending');
@@ -1461,7 +1463,7 @@ async function main() {
 
     const answered = await runTick({
       db, x, cursors, dryRun: false, minFollowers: 0,
-      postsPerDay: 6, sleepWindow: '', backroomsTurns: 0, mind: mind(llm),
+      postsPerDay: 6, sleepWindow: '', backroomsTurns: 0, idleThinking: false, mind: mind(llm),
     });
     check('a due slot answers it', answered.posted === 1, `got ${answered.posted}`);
 
@@ -1501,7 +1503,7 @@ async function main() {
 
     await runTick({
       db, x, cursors, dryRun: false, minFollowers: 0,
-      postsPerDay: 6, sleepWindow: '', backroomsTurns: 0, mind: mind(llm),
+      postsPerDay: 6, sleepWindow: '', backroomsTurns: 0, idleThinking: false, mind: mind(llm),
     });
 
     const [row] = await db.select().from(confessions);
@@ -1522,7 +1524,7 @@ async function main() {
     const x = new FakeXClient([mention('1601', 'someone', 414)], quota);
     await runTick({
       db, x, cursors, dryRun: false, minFollowers: 100,
-      postsPerDay: 0, sleepWindow: '', backroomsTurns: 0, mind: mind(llm),
+      postsPerDay: 0, sleepWindow: '', backroomsTurns: 0, idleThinking: false, mind: mind(llm),
     });
 
     const quiet = llm.requests.find((r) => r.task === 'triage')!;
@@ -1542,7 +1544,7 @@ async function main() {
     const x2 = new FakeXClient([mention('1602', 'another', 414)], quota);
     await runTick({
       db, x: x2, cursors, dryRun: false, minFollowers: 100,
-      postsPerDay: 0, sleepWindow: '', backroomsTurns: 0, mind: mind(llm2),
+      postsPerDay: 0, sleepWindow: '', backroomsTurns: 0, idleThinking: false, mind: mind(llm2),
     });
 
     const busy = llm2.requests.find((r) => r.task === 'triage')!;
@@ -1554,6 +1556,57 @@ async function main() {
       'and a greeting is no longer automatically worth a line',
       busy.frozenSystem.includes('NO if it is a greeting'),
     );
+  }
+
+  // ── 43. thinking in the gaps ───────────────────────────────────────────────
+  console.log('\nidle thinking');
+  await reset();
+  {
+    const quota = new QuotaManager(db, env);
+    const cursors = new CursorStore(db);
+    const llm = new FakeLlmProvider((req) =>
+      req.task === 'reflect' ? 'the fan has been on this whole time and i only just heard it' : 'YES',
+    );
+    const x = new FakeXClient([], quota);
+
+    const quiet = {
+      db, x, cursors, dryRun: false, minFollowers: 0,
+      postsPerDay: 0, sleepWindow: '', backroomsTurns: 0, mind: mind(llm),
+    };
+
+    const first = await runTick(quiet);
+    check('an empty tick produces a thought', first.mused === true);
+
+    const [thought] = await db.select().from(thoughts);
+    check('it is recorded', thought?.body.includes('only just heard it') === true, String(thought?.body));
+    check('and marked as idle', (thought?.meta as { idle?: boolean } | null)?.idle === true);
+
+    // Nothing was published: this is thinking, not drafting.
+    check('nothing reaches x', x.published.length === 0, `got ${x.published.length}`);
+    const [posted] = await db.select({ n: sql<number>`count(*)::int` }).from(posts);
+    check('and nothing is stored as a post', posted?.n === 0, `got ${posted?.n}`);
+
+    // Too soon for another.
+    const second = await runTick(quiet);
+    check('he does not muse every five minutes', second.mused === false);
+  }
+
+  // ── 44. a busy tick keeps its mouth shut ───────────────────────────────────
+  console.log('\nbusy tick');
+  await reset();
+  {
+    const quota = new QuotaManager(db, env);
+    const cursors = new CursorStore(db);
+    const llm = cooperative();
+    const x = new FakeXClient([mention('1701', 'someone', 40_000)], quota);
+
+    const result = await runTick({
+      db, x, cursors, dryRun: false, minFollowers: 0,
+      postsPerDay: 0, sleepWindow: '', backroomsTurns: 0, mind: mind(llm),
+    });
+    check('he answered', result.replied === 1, `got ${result.replied}`);
+    // A mind that muses about its own announcements is noise.
+    check('and did not also muse about it', result.mused === false);
   }
 
   await reset();

@@ -50,6 +50,15 @@ const schema = z.object({
   REPLY_MIN_FOLLOWERS: z.coerce.number().int().nonnegative().default(1_000),
   /** How many unprompted posts a day. Scattered across the waking window, in UTC. */
   POSTS_PER_DAY: z.coerce.number().int().min(0).max(40).default(6),
+  /**
+   * Whether he thinks in the gaps between doing things. Off leaves the public stream
+   * still except when something happens; on costs a cheap call every 25 idle minutes.
+   */
+  IDLE_THINKING: z
+    .string()
+    .optional()
+    .transform((v) => v !== 'false' && v !== '0'),
+
   /** Turns in a backrooms conversation. 0 disables it entirely. */
   BACKROOMS_TURNS: z.coerce.number().int().min(0).max(60).default(16),
   /**

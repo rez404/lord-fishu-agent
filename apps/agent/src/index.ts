@@ -145,6 +145,7 @@ async function main() {
           sleepWindow: env.SLEEP_WINDOW_UTC,
           backroomsTurns: env.BACKROOMS_TURNS,
           backroomsEveryHours: env.BACKROOMS_EVERY_HOURS,
+          idleThinking: env.IDLE_THINKING,
           mind: {
             llm,
             mood,

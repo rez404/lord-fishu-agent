@@ -4,6 +4,7 @@ import { actionLog, inboundTweets, people, posts } from '@fishnu/db';
 import { logger } from '@fishnu/shared';
 import { runBackrooms, shouldDream } from '../mind/backrooms.js';
 import { closeConfession, confessionMayTakeSlot, pendingConfession } from '../mind/confession.js';
+import { thinkIdly } from '../mind/idle.js';
 import { closeImpulse, pendingImpulse } from '../mind/impulse.js';
 import { composePost } from '../mind/post.js';
 import { composeReply, type ReplyDeps } from '../mind/reply.js';
@@ -23,6 +24,7 @@ export interface TickResult {
   declined: number;
   posted: number;
   dreamt: number;
+  mused: boolean;
 }
 
 /**
@@ -44,6 +46,8 @@ export async function runTick(deps: {
   sleepWindow: string;
   backroomsTurns: number;
   backroomsEveryHours?: number;
+  /** Set false to leave the stream silent between actions. */
+  idleThinking?: boolean;
   mind: Omit<ReplyDeps, 'db'>;
 }): Promise<TickResult> {
   const { db, x, cursors, dryRun, minFollowers, postsPerDay, sleepWindow, backroomsTurns, mind } = deps;
@@ -60,7 +64,12 @@ export async function runTick(deps: {
   const posted = xEnabled ? await postIfDue(db, x, { ...mind, db }, { postsPerDay, sleepWindow }) : 0;
   const dreamt = await dreamIfNight(db, mind.llm, backroomsTurns, sleepWindow, deps.backroomsEveryHours);
 
-  return { ingested, replied, parked, declined, posted, dreamt };
+  // Only when the tick did nothing else. A mind that muses over its own announcements is
+  // noise; one that muses in the gaps is what the stream claims to be showing.
+  const busy = ingested > 0 || replied > 0 || posted > 0 || dreamt > 0 || declined > 0;
+  const mused = busy || deps.idleThinking === false ? false : await thinkIdly({ ...mind, db });
+
+  return { ingested, replied, parked, declined, posted, dreamt, mused };
 }
 
 /**
