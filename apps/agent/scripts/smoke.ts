@@ -161,6 +161,7 @@ async function main() {
     REPLY_MIN_FOLLOWERS: 1_000,
     POSTS_PER_DAY: 6,
     BACKROOMS_TURNS: 16,
+    BACKROOMS_EVERY_HOURS: 24,
     LLM_BASE_URL: 'https://api.ppq.ai',
     LLM_API_KEY: 'unused-by-the-fake-provider',
     LLM_MODEL_VOICE: 'fake',
@@ -1021,10 +1022,41 @@ async function main() {
 
     check('and only once a night', (await shouldDream(db, '03:00-09:00', night)) === false);
     check(
+      'a shorter interval ignores the quiet window',
+      (await shouldDream(db, '03:00-09:00', new Date('2026-08-23T14:00:00Z'), 4)) === true,
+    );
+    check(
+      'but still respects the spacing',
+      (await shouldDream(db, '03:00-09:00', new Date('2026-08-23T05:00:00Z'), 4)) === false,
+    );
+    check('and zero disables it', (await shouldDream(db, '', new Date(), 0)) === false);
+    check(
       'with no sleep window it settles for the small hours',
       (await shouldDream(db, '', new Date('2026-08-24T04:30:00Z'))) === true &&
         (await shouldDream(db, '', new Date('2026-08-24T20:00:00Z'))) === false,
     );
+  }
+
+  // ── 27b. a turn cut off mid-sentence ends the conversation ─────────────────
+  console.log('\ntruncated turn');
+  await reset();
+  {
+    let turn = 0;
+    const llm = new FakeLlmProvider(() => `line ${++turn}`);
+    const realComplete = llm.complete.bind(llm);
+    llm.complete = async (req) => {
+      const r = await realComplete(req);
+      // The fifth turn runs out of budget. Nothing edits the transcript afterwards, so
+      // half a sentence would be published exactly as it came back.
+      return turn === 5 ? { ...r, truncated: true } : r;
+    };
+
+    const result = await runBackrooms({ db, llm, turns: 12 });
+    check('it stops at the cut', result?.turns === 4, `got ${result?.turns}`);
+
+    const messages = await db.select().from(backroomsMessages);
+    check('the half thought is not stored', messages.length === 4, `got ${messages.length}`);
+    check('and what came before is published', (await db.select().from(backroomsSessions))[0]?.status === 'published');
   }
 
   // ── 28. a broken-off conversation is still published ───────────────────────

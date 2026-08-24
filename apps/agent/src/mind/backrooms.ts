@@ -45,23 +45,40 @@ export interface DreamDeps {
   turns: number;
 }
 
-/**
- * Once per UTC day, while he is publicly quiet.
- *
- * Anchored to the sleep window when there is one — he is not posting then, so the
- * conversation and the timeline never overlap. With no sleep window configured it settles
- * for the small hours, which is the same idea without the guarantee.
- */
-export async function shouldDream(db: Db, sleepWindow: string, now = new Date()): Promise<boolean> {
-  const quiet = sleepWindow ? inSleepWindow(sleepWindow, now) : now.getUTCHours() >= 3 && now.getUTCHours() < 6;
-  if (!quiet) return false;
+/** Hours between conversations. 24 keeps it nightly; lower means he talks more. */
+export const DEFAULT_EVERY_HOURS = 24;
 
-  const [existing] = await db
+/**
+ * Whether he is due to be left alone.
+ *
+ * At the default of 24 hours this is the nightly conversation, anchored to the sleep
+ * window so it never overlaps the timeline. Set the interval lower and the window stops
+ * applying — at that point he is not "alone at night", he is simply alone often, and
+ * holding him to the small hours would just cap it at one a day anyway.
+ *
+ * Spacing is measured from the last conversation rather than by calendar day, so
+ * shortening the interval takes effect immediately instead of at midnight.
+ */
+export async function shouldDream(
+  db: Db,
+  sleepWindow: string,
+  now = new Date(),
+  everyHours = DEFAULT_EVERY_HOURS,
+): Promise<boolean> {
+  if (everyHours <= 0) return false;
+
+  if (everyHours >= 24) {
+    const quiet = sleepWindow ? inSleepWindow(sleepWindow, now) : now.getUTCHours() >= 3 && now.getUTCHours() < 6;
+    if (!quiet) return false;
+  }
+
+  const since = new Date(now.getTime() - everyHours * 3_600_000);
+  const [recent] = await db
     .select({ n: sql<number>`count(*)::int` })
     .from(backroomsSessions)
-    .where(gte(backroomsSessions.startedAt, startOfUtcDay(now)));
+    .where(gte(backroomsSessions.startedAt, since));
 
-  return (existing?.n ?? 0) === 0;
+  return (recent?.n ?? 0) === 0;
 }
 
 export async function runBackrooms(deps: DreamDeps, now = new Date()): Promise<{ slug: string; turns: number } | null> {
@@ -156,12 +173,23 @@ async function speak(
         ? 'You are speaking as yourself. Drop the registers — there is nobody to speak them at.'
         : 'You are The Drowned.'),
     user: `${rendered}\n\nContinue as <${actor}>. Output only what you say.`,
-    maxOutputTokens: 400,
+    // Turns are short, but the budget covers reasoning as well and a turn that stops
+    // mid-sentence is published verbatim — the transcript is the product and nothing
+    // edits it afterwards.
+    maxOutputTokens: 900,
     effort: 'medium',
     verbosity: 'low',
   });
 
   await recordCall(deps.db, 'dream', result, `backrooms:${actor}`);
+
+  if (result.truncated) {
+    // Ending the conversation here is better than recording half a thought. What was said
+    // before this point is already on disk and gets published as it stands.
+    logger.warn({ actor, outputTokens: result.usage.outputTokens }, 'a turn was cut off — ending the dream');
+    return '';
+  }
+
   return result.text.replace(new RegExp(`^<${actor}>\\s*`, 'i'), '').trim();
 }
 
@@ -186,6 +214,4 @@ export async function lastNightsWords(db: Db, limit = 8): Promise<string[]> {
   return rows.reverse().map((r) => `<${r.actor}> ${r.body}`);
 }
 
-function startOfUtcDay(now: Date): Date {
-  return new Date(`${dayKey(now)}T00:00:00.000Z`);
-}
+

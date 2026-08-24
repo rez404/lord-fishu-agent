@@ -42,6 +42,7 @@ export async function runTick(deps: {
   postsPerDay: number;
   sleepWindow: string;
   backroomsTurns: number;
+  backroomsEveryHours?: number;
   mind: Omit<ReplyDeps, 'db'>;
 }): Promise<TickResult> {
   const { db, x, cursors, dryRun, minFollowers, postsPerDay, sleepWindow, backroomsTurns, mind } = deps;
@@ -56,7 +57,7 @@ export async function runTick(deps: {
     ? await answerPending(db, x, dryRun, { ...mind, db })
     : { replied: 0, declined: 0 };
   const posted = xEnabled ? await postIfDue(db, x, { ...mind, db }, { postsPerDay, sleepWindow }) : 0;
-  const dreamt = await dreamIfNight(db, mind.llm, backroomsTurns, sleepWindow);
+  const dreamt = await dreamIfNight(db, mind.llm, backroomsTurns, sleepWindow, deps.backroomsEveryHours);
 
   return { ingested, replied, parked, declined, posted, dreamt };
 }
@@ -70,9 +71,10 @@ async function dreamIfNight(
   llm: ReplyDeps['llm'],
   turns: number,
   sleepWindow: string,
+  everyHours = 24,
 ): Promise<number> {
   if (turns <= 0) return 0;
-  if (!(await shouldDream(db, sleepWindow))) return 0;
+  if (!(await shouldDream(db, sleepWindow, new Date(), everyHours))) return 0;
 
   try {
     const result = await runBackrooms({ db, llm, turns });

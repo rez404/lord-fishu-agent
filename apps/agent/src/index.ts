@@ -144,6 +144,7 @@ async function main() {
           postsPerDay: env.POSTS_PER_DAY,
           sleepWindow: env.SLEEP_WINDOW_UTC,
           backroomsTurns: env.BACKROOMS_TURNS,
+          backroomsEveryHours: env.BACKROOMS_EVERY_HOURS,
           mind: {
             llm,
             mood,

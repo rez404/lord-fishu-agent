@@ -50,8 +50,14 @@ const schema = z.object({
   REPLY_MIN_FOLLOWERS: z.coerce.number().int().nonnegative().default(1_000),
   /** How many unprompted posts a day. Scattered across the waking window, in UTC. */
   POSTS_PER_DAY: z.coerce.number().int().min(0).max(40).default(6),
-  /** Turns in the nightly backrooms conversation. 0 disables it. */
+  /** Turns in a backrooms conversation. 0 disables it entirely. */
   BACKROOMS_TURNS: z.coerce.number().int().min(0).max(60).default(16),
+  /**
+   * Hours between conversations. 24 keeps it nightly and inside the quiet window; lower
+   * lets him talk to himself around the clock. Each conversation costs roughly $0.30, so
+   * every 4 hours is about $1.80 a day.
+   */
+  BACKROOMS_EVERY_HOURS: z.coerce.number().int().min(0).max(168).default(24),
 
   /**
    * Any OpenAI-compatible gateway. PPQ by default; point it at api.openai.com or another
@@ -92,6 +98,19 @@ const apiSchema = z.object({
   API_PORT: z.coerce.number().int().positive().default(8081),
   /** Bearer token for the operator routes. Unset disables them entirely. */
   ADMIN_TOKEN: z.string().optional(),
+
+  /**
+   * X OAuth 2.0, used only to verify who a visitor is before their confession carries a
+   * name. Unset disables the connect flow and confessions stay anonymous.
+   */
+  X_CLIENT_ID: z.string().optional(),
+  X_CLIENT_SECRET: z.string().optional(),
+  /** Must match the callback registered in the X developer portal, exactly. */
+  X_CALLBACK_URL: z.string().url().optional(),
+  /** Where to send someone back to once they have connected. */
+  SITE_URL: z.string().url().default('http://localhost:3000'),
+  /** Signs visitor session cookies. Any long random string. */
+  SESSION_SECRET: z.string().optional(),
   /** Comma-separated list of allowed browser origins (the Vercel deployment + previews). */
   CORS_ORIGINS: z.string().default('http://localhost:3000'),
 });
