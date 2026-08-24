@@ -41,7 +41,7 @@ export default function Admin() {
   const [links, setLinks] = useState('');
   const [facts, setFacts] = useState('');
   const [address, setAddress] = useState('');
-  const [chain, setChain] = useState('robinhood chain');
+  const [chain, setChain] = useState('solana');
   const [symbol, setSymbol] = useState('');
   const [knowledgeLoaded, setKnowledgeLoaded] = useState(false);
   const [threshold, setThreshold] = useState('');
@@ -91,7 +91,7 @@ export default function Admin() {
     setLinks(state.knowledge.links.map((l) => `${l.label} ${l.url}`).join('\n'));
     setFacts(state.knowledge.facts);
     setAddress(state.knowledge.contract?.address ?? '');
-    setChain(state.knowledge.contract?.chain || 'robinhood chain');
+    setChain(state.knowledge.contract?.chain || 'solana');
     setSymbol(state.knowledge.contract?.symbol ?? '');
     setKnowledgeLoaded(true);
   }, [state, knowledgeLoaded]);
@@ -362,7 +362,7 @@ export default function Admin() {
                   id="address"
                   className="prompt-input"
                   style={{ caretColor: 'var(--phosphor)', width: '100%' }}
-                  placeholder="0x… — paste it, do not type it"
+                  placeholder="paste it, do not type it"
                   spellCheck={false}
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
