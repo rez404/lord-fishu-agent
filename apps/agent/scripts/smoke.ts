@@ -30,6 +30,7 @@ import { FakeLlmProvider } from '../src/llm/fake.js';
 import { OVERLAP_THRESHOLD, REPETITION_THRESHOLD, checkDraft, cosine, overlap } from '../src/mind/guards.js';
 import { lastNightsWords, runBackrooms, shouldDream } from '../src/mind/backrooms.js';
 import { loadKnowledge } from '../src/mind/knowledge.js';
+import { MOODS } from '../src/mind/mood.js';
 import { dueSlot } from '../src/mind/schedule.js';
 import type { ReplyDeps } from '../src/mind/reply.js';
 import { QuotaExceededError, QuotaManager } from '../src/quota/manager.js';
@@ -679,9 +680,21 @@ async function main() {
       new Set(voice.map((r) => r.frozenSystem)).size === 1,
       `${new Set(voice.map((r) => r.frozenSystem)).size} distinct prefixes`,
     );
+    // Substring matching was too loose to mean anything — `low\.` hit the word "below."
+    // in a sentence about the law. Match the actual values instead.
+    const frozen = voice[0]!.frozenSystem;
     check(
-      'the frozen prefix contains no date, mood or clock',
-      !/2026-08-2|patient\.|low\./.test(voice[0]!.frozenSystem),
+      'the frozen prefix contains no date',
+      !/\b20\d{2}-\d{2}-\d{2}\b/.test(frozen),
+      frozen.match(/\b20\d{2}-\d{2}-\d{2}\b/)?.[0] ?? '',
+    );
+    check(
+      'and no mood',
+      !Object.values(MOODS).some((m) => frozen.includes(m)),
+    );
+    check(
+      'and nothing about how long he has been awake',
+      !frozen.includes('You have been awake'),
     );
     check(
       'the volatile half is where those live',
@@ -1607,6 +1620,34 @@ async function main() {
     check('he answered', result.replied === 1, `got ${result.replied}`);
     // A mind that muses about its own announcements is noise.
     check('and did not also muse about it', result.mused === false);
+  }
+
+  // ── 45. he knows the name of his own law ───────────────────────────────────
+  console.log('\nthe law by name');
+  await reset();
+  {
+    const quota = new QuotaManager(db, env);
+    const cursors = new CursorStore(db);
+    const llm = cooperative();
+    const x = new FakeXClient([mention('1801', 'asker', 1_169)], quota);
+
+    await runTick({
+      db, x, cursors, dryRun: false, minFollowers: 100,
+      postsPerDay: 0, sleepWindow: '', backroomsTurns: 0, idleThinking: false, mind: mind(llm),
+    });
+
+    const voice = llm.requests.find((r) => r.task === 'voice')!;
+    // He denied having a "chickenmandment" because the word appeared nowhere in his
+    // prompt — the canon had a name and nobody told him.
+    check('the law is named', voice.frozenSystem.includes('Chickenmandments'));
+    check('and the aliases people use are listed', voice.frozenSystem.includes('chickenmandment'));
+    check('they are numbered so "the third" resolves', /\n3\. Thou shalt work for your bags/.test(voice.frozenSystem));
+
+    const critic = llm.requests.find((r) => r.task === 'critic')!;
+    check(
+      'a plain correct answer is not a failure',
+      critic.frozenSystem.includes('A plain ') && critic.frozenSystem.includes('true answer is not a failure'),
+    );
   }
 
   await reset();

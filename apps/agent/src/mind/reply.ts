@@ -143,7 +143,11 @@ async function criticise(deps: ReplyDeps, text: string, situation: string): Prom
       'FAIL if it sounds like a chatbot, an influencer, or a motivational poster; if it ' +
       'explains itself; if it is trying to be liked; if it states the plain moral instead ' +
       'of the observation; or if it is simply forgettable.\n' +
-      'PASS only if you would stop scrolling for it.',
+      'PASS if you would stop scrolling for it.\n\n' +
+      'One exception, and it matters: if someone asked a direct question and the line ' +
+      'answers it correctly — quoting his own law, giving a fact about himself, saying ' +
+      'where something is — then PASS it even if it is plain and unremarkable. A plain ' +
+      'true answer is not a failure. Silence in its place looks like he does not know.',
     user: `Situation: ${situation}\n\nLine: ${text}`,
     maxOutputTokens: 500,
     effort: 'low',
