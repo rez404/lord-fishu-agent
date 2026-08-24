@@ -28,6 +28,9 @@ async function get<T>(path: string, init?: RequestInit): Promise<T | null> {
   try {
     const res = await fetch(`${API_URL}${path}`, {
       ...init,
+      // The visitor session is a cookie on the API's origin, so it only travels when
+      // credentials are included explicitly on a cross-origin request.
+      credentials: 'include',
       signal: AbortSignal.timeout(8_000),
       cache: 'no-store',
     });
@@ -47,12 +50,19 @@ export const api = {
     get<{ session: BackroomsSession; messages: BackroomsMessage[] }>(`/api/backrooms/${slug}`),
   ledger: () => get<Ledger>('/api/ledger'),
   congregation: () => get<{ people: Believer[] }>('/api/congregation'),
-  confess: async (body: string, handle: string): Promise<{ ok: boolean; error?: string }> => {
+  /** Who the browser has proved it is, if anyone. */
+  whoami: () => get<{ enabled: boolean; visitor: { id: string; username: string } | null }>('/auth/x/status'),
+  connectUrl: () => `${API_URL}/auth/x/start`,
+  disconnect: () =>
+    fetch(`${API_URL}/auth/x/logout`, { method: 'POST', credentials: 'include' }).catch(() => {}),
+
+  confess: async (body: string): Promise<{ ok: boolean; error?: string }> => {
     try {
       const res = await fetch(`${API_URL}/api/confess`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ body, handle }),
+        credentials: 'include',
+        body: JSON.stringify({ body }),
         signal: AbortSignal.timeout(8_000),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };

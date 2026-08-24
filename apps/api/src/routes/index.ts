@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { and, desc, eq, gt, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import type { Db } from '@fishnu/db';
+import { readVisitor } from './auth.js';
 import {
   backroomsMessages,
   backroomsSessions,
@@ -15,7 +16,10 @@ import {
 const STREAM_POLL_MS = 2_000;
 const STREAM_HEARTBEAT_MS = 25_000;
 
-export async function registerRoutes(app: FastifyInstance, opts: { db: Db }) {
+export async function registerRoutes(
+  app: FastifyInstance,
+  opts: { db: Db; sessionSecret?: string | null },
+) {
   const { db } = opts;
 
   app.get('/health', async () => ({ ok: true }));
@@ -118,14 +122,24 @@ export async function registerRoutes(app: FastifyInstance, opts: { db: Db }) {
     return { wallet: env('WALLET_PUBKEY'), holdings: [], transactions: [], live: false };
   });
 
-  app.post<{ Body: { body?: string; handle?: string } }>('/api/confess', {
+  app.post<{ Body: { body?: string } }>('/api/confess', {
     config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
     handler: async (req, reply) => {
       const body = (req.body?.body ?? '').trim();
       if (body.length < 2 || body.length > 500) {
         return reply.code(400).send({ error: 'a confession must be between 2 and 500 characters' });
       }
-      const handle = (req.body?.handle ?? '').trim().replace(/^@/, '').slice(0, 15) || null;
+
+      /*
+       * The name comes from a verified session or not at all.
+       *
+       * It used to be a text field, which meant anyone could sign as anyone — and the
+       * agent answers confessions in public, by name. A reply addressed to someone who
+       * never wrote in is the agent putting words in a stranger's mouth in front of an
+       * audience. Unconnected visitors are simply anonymous.
+       */
+      const visitor = readVisitor(req.headers.cookie, opts.sessionSecret ?? null);
+      const handle = visitor?.username ?? null;
 
       // Hashed with a salt so the stored row cannot be walked back to an IP address.
       const sourceHash = createHash('sha256')

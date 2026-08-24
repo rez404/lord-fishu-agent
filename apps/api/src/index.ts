@@ -5,6 +5,7 @@ import Fastify from 'fastify';
 import { createDb } from '@fishnu/db';
 import { loadApiEnv, logger } from '@fishnu/shared';
 import { registerAdminRoutes } from './routes/admin.js';
+import { registerAuthRoutes } from './routes/auth.js';
 import { registerRoutes } from './routes/index.js';
 
 async function main() {
@@ -15,6 +16,9 @@ async function main() {
 
   const origins = env.CORS_ORIGINS.split(',').map((o) => o.trim()).filter(Boolean);
   await app.register(cors, {
+    // The visitor session is a cookie, so the browser only sends it when credentials are
+    // allowed — and allowing them means the origin must be echoed exactly, never '*'.
+    credentials: true,
     origin: (origin, cb) => {
       // Same-origin and server-to-server requests arrive without an Origin header.
       if (!origin) return cb(null, true);
@@ -30,7 +34,7 @@ async function main() {
   });
 
   await app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
-  await app.register(registerRoutes, { db });
+  await app.register(registerRoutes, { db, sessionSecret: env.SESSION_SECRET ?? null });
   // Publish-only, so no subscriber-mode restrictions apply.
   const publisher = env.REDIS_URL ? new Redis(env.REDIS_URL, { maxRetriesPerRequest: null }) : null;
   const wake = publisher
@@ -40,6 +44,14 @@ async function main() {
     : undefined;
 
   await app.register(registerAdminRoutes, { db, token: env.ADMIN_TOKEN ?? null, wake });
+  await app.register(registerAuthRoutes, {
+    clientId: env.X_CLIENT_ID ?? null,
+    clientSecret: env.X_CLIENT_SECRET ?? null,
+    callbackUrl: env.X_CALLBACK_URL ?? null,
+    siteUrl: env.SITE_URL,
+    sessionSecret: env.SESSION_SECRET ?? null,
+    redis: publisher,
+  });
 
   if (!env.REDIS_URL) {
     logger.warn('REDIS_URL is not set — impulses will wait for the agent\'s next tick');

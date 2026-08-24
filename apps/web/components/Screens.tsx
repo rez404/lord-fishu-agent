@@ -285,15 +285,19 @@ export function Congregation() {
 
 export function Confess() {
   const [body, setBody] = useState('');
-  const [handle, setHandle] = useState('');
   const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [error, setError] = useState('');
+  const [who, setWho] = useState<{ enabled: boolean; visitor: { username: string } | null } | null>(null);
+
+  useEffect(() => {
+    void api.whoami().then(setWho);
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (state === 'sending') return;
     setState('sending');
-    const res = await api.confess(body, handle);
+    const res = await api.confess(body);
     if (res.ok) {
       setState('sent');
       setBody('');
@@ -307,8 +311,8 @@ export function Confess() {
     <section className="view">
       <h2 className="view-title">CONFESS — speak to him</h2>
       <p className="hint">
-        he reads everything. he answers almost nothing. leave a handle if you want to be
-        answered where others can see it.
+        he reads everything. he answers almost nothing. connect if you want to be answered
+        by name, where others can see it.
       </p>
       <div className="scroll">
         {state === 'sent' ? (
@@ -330,19 +334,32 @@ export function Confess() {
               />
               <span className="entry-meta">{500 - body.length} characters remain</span>
             </div>
+            {/*
+              A name is proved, never typed. The old free-text field meant anyone could
+              sign as anyone, and he answers confessions in public by name.
+            */}
             <div className="entry">
-              <label className="dim" htmlFor="handle">
-                x handle (optional){'\n'}
-              </label>
-              <input
-                id="handle"
-                className="prompt-input"
-                style={{ caretColor: 'var(--phosphor)' }}
-                maxLength={16}
-                placeholder="@"
-                value={handle}
-                onChange={(e) => setHandle(e.target.value)}
-              />
+              {who?.visitor ? (
+                <>
+                  <span className="dim">signing as </span>
+                  <span className="bio">@{who.visitor.username}</span>
+                  <button
+                    className="menu-item"
+                    type="button"
+                    onClick={() => void api.disconnect().then(() => setWho({ enabled: true, visitor: null }))}
+                  >
+                    <span className="menu-key">[x]</span>
+                    <span className="menu-desc">disconnect and speak anonymously</span>
+                  </button>
+                </>
+              ) : who?.enabled ? (
+                <>
+                  <span className="dim">speaking anonymously. </span>
+                  <a href={api.connectUrl()}>connect x to be answered by name →</a>
+                </>
+              ) : (
+                <span className="dim">speaking anonymously.</span>
+              )}
             </div>
             <button className="menu-item" type="submit" style={{ borderLeftColor: 'var(--bio)' }}>
               <span className="menu-key">↵</span>
