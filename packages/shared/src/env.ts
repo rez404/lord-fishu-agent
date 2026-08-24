@@ -51,6 +51,12 @@ const schema = z.object({
   /** How many unprompted posts a day. Scattered across the waking window, in UTC. */
   POSTS_PER_DAY: z.coerce.number().int().min(0).max(40).default(6),
   /**
+   * Minimum minutes between two unprompted posts. Lower it to feel more present; leave
+   * the day more gaps than posts or the schedule stops being random and starts being a
+   * metronome.
+   */
+  MIN_POST_GAP_MINUTES: z.coerce.number().int().min(15).max(720).default(180),
+  /**
    * Whether he thinks in the gaps between doing things. Off leaves the public stream
    * still except when something happens; on costs a cheap call every 25 idle minutes.
    */

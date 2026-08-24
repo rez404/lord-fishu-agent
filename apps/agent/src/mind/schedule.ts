@@ -39,8 +39,14 @@ export const ANGLES = [
  * Held across the day boundary as well as within a day: the last slot of one plan
  * constrains the first slot of the next, or a 23:50 and a 00:10 sit next to each other on
  * the timeline looking like a machine that reset at midnight.
+ *
+ * Configurable, because the right value is a judgement about how present he should feel
+ * and that changes. Worth knowing when tuning it: as the count approaches the number of
+ * gaps the window can hold, the randomness disappears and the plan converges on evenly
+ * spaced — which is the one shape this whole mechanism exists to avoid. Leave the day
+ * room to cluster.
  */
-const MIN_GAP_MINUTES = 180;
+const MIN_GAP_MINUTES = Number(process.env.MIN_POST_GAP_MINUTES ?? 180);
 
 /**
  * How late a slot may fire before it is dropped instead.
