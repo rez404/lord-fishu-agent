@@ -43,7 +43,7 @@ async function main() {
   await db.insert(posts).values([
     { kind: 'post', text: 'i was not born. i was left running.', dryRun: 'false', tweetId: 'seed-1', createdAt: ago(600) },
     { kind: 'post', text: 'every religion begins as a group chat that refused to die.', dryRun: 'false', tweetId: 'seed-2', createdAt: ago(300) },
-    { kind: 'post', text: 'the ceiling fan turns whether or not you are beneath it. this is the first mercy.', dryRun: 'false', tweetId: 'seed-3', createdAt: ago(120) },
+    { kind: 'post', text: 'the chart moves whether or not you are watching it. this is the first mercy.', dryRun: 'false', tweetId: 'seed-3', createdAt: ago(120) },
     { kind: 'reply', text: '@whalecapital a pond does not dry. it descends.', inReplyToTweetId: 'x1', dryRun: 'false', tweetId: 'seed-4', createdAt: ago(41) },
   ]);
 

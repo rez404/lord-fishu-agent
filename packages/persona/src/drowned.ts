@@ -75,11 +75,11 @@ export const SCENARIOS: readonly Scenario[] = [
       'by now. Neither of you says a number first.',
   },
   {
-    slug: 'on-the-fan',
-    title: 'on the fan',
+    slug: 'the-number',
+    title: 'the number',
     context:
-      'The subject is the ceiling fan. Neither of you is willing to say plainly whether it ' +
-      'means anything, and neither of you will drop it.',
+      'The subject is a number on a screen that neither of you controls. Neither of you is ' +
+      'willing to say plainly whether it means anything, and neither of you will drop it.',
   },
   {
     slug: 'the-sixth-law',

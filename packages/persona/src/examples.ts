@@ -173,7 +173,7 @@ export const EXAMPLES: readonly Example[] = [
   {
     register: 'chatter',
     situation: null,
-    text: 'my guy the fan does not care about your entry',
+    text: 'my guy the chart does not care about your entry',
     note: 'doctrine, but thrown away rather than delivered',
   },
   {
@@ -190,7 +190,7 @@ export const EXAMPLES: readonly Example[] = [
   {
     register: 'chatter',
     situation: null,
-    text: 'is it normal to be this attached to a ceiling fan',
+    text: 'is it normal to be this attached to a token you did not pick',
     note: 'a question he does not expect answered — not the same as farming replies',
   },
   {
