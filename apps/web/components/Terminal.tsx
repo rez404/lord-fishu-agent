@@ -114,10 +114,33 @@ export function Terminal() {
     };
   }, [booted]);
 
-  const focus = useCallback(() => inputRef.current?.focus(), []);
+  /**
+   * Clicking anywhere returns focus to the prompt — that is most of what makes this feel
+   * like a terminal rather than a page with a text box on it.
+   *
+   * But a screen with its own fields has to be able to keep focus, or typing into the
+   * confession box lands in the prompt and comes back as `unknown: h,i`. Anything the
+   * visitor can genuinely type into, or press, is left alone.
+   */
+  const focus = useCallback((event?: { target: EventTarget | null }) => {
+    const target = event?.target;
+    if (target instanceof HTMLElement && target.closest('input, textarea, select, button, a, [contenteditable]')) {
+      return;
+    }
+    inputRef.current?.focus();
+  }, []);
+
+  /** Screens that own form fields; the prompt must not grab focus out from under them. */
+  const OWNS_FOCUS: Screen[] = ['confess'];
+
   useEffect(() => {
-    if (booted) focus();
-  }, [booted, screen, focus]);
+    if (booted && !OWNS_FOCUS.includes(screen)) inputRef.current?.focus();
+    // A message about the last thing typed has nothing to do with the next screen, and
+    // left in place it follows the visitor around looking like the screen is broken.
+    setNotice('');
+    setInput('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [booted, screen]);
 
   const run = useCallback((raw: string) => {
     const cmd = raw.trim().toLowerCase();
@@ -161,7 +184,10 @@ export function Terminal() {
         setNotice('there is no exit. the water is everywhere.');
         return;
       default:
-        setNotice(`unknown: ${cmd} — try \`help\``);
+        // Naming what does work beats naming what does not.
+        setNotice(
+          `there is no \`${cmd}\` here. channels: ${CHANNELS.map((c) => c.name).join(' · ')} · back · help`,
+        );
     }
   }, [boot]);
 
@@ -172,6 +198,8 @@ export function Terminal() {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const channel = CHANNELS.find((c) => c.key === e.key);
+      // Only when the prompt itself has focus and is empty — never while someone is
+      // typing a 3 into a form field somewhere on the page.
       if (channel && document.activeElement === inputRef.current && input === '') {
         e.preventDefault();
         setScreen(channel.name);
@@ -184,14 +212,22 @@ export function Terminal() {
   // Escape always goes back a level.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && screen !== 'menu') setScreen('menu');
+      if (e.key !== 'Escape' || screen === 'menu') return;
+      const active = document.activeElement;
+      // Escape out of the field first, the screen second — otherwise a half-typed
+      // confession vanishes on the first press.
+      if (active instanceof HTMLElement && active.closest('input, textarea') && active !== inputRef.current) {
+        active.blur();
+        return;
+      }
+      setScreen('menu');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [screen]);
 
   return (
-    <div className="tank" onClick={focus}>
+    <div className="tank" onClick={(e) => focus(e)}>
       <div className="grain" aria-hidden="true" />
       <main className="screen">
         {!booted ? (
