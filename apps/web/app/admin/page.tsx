@@ -214,15 +214,24 @@ export default function Admin() {
               )}
 
               <p className="book">RECENT</p>
-              {state.recent.map((r) => (
-                <div className="entry entry-meta" key={r.id}>
-                  {r.createdAt.slice(5, 16).replace('T', ' ')} {r.action}{' '}
-                  <span className={r.status === 'error' ? 'coral' : r.status === 'ok' ? 'bio' : 'dim'}>
-                    {r.status}
-                  </span>
-                  {r.reason ? ` — ${r.reason}` : ''}
-                </div>
-              ))}
+              {state.recent.map((r) => {
+                // "ok" on a dry-run post means composed, not published. Showing the same
+                // word for both sends an operator looking for a tweet that does not exist.
+                const dry = r.reason?.startsWith('dry run');
+                return (
+                  <div className="entry entry-meta" key={r.id}>
+                    {r.createdAt.slice(5, 16).replace('T', ' ')} {r.action}{' '}
+                    <span
+                      className={
+                        r.status === 'error' ? 'coral' : dry ? 'dim' : r.status === 'ok' ? 'bio' : 'dim'
+                      }
+                    >
+                      {dry ? 'not sent' : r.status}
+                    </span>
+                    {r.reason ? ` — ${r.reason}` : ''}
+                  </div>
+                );
+              })}
 
               {error && <p className="coral">{error}</p>}
             </div>

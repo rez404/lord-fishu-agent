@@ -102,9 +102,11 @@ export class OpenAiCompatibleProvider implements LlmProvider {
 
     const usage = response.usage;
     const cached = usage?.prompt_tokens_details?.cached_tokens ?? 0;
+    const choice = response.choices[0];
 
     const result: CompleteResult = {
-      text: (response.choices[0]?.message?.content ?? '').trim(),
+      text: (choice?.message?.content ?? '').trim(),
+      truncated: choice?.finish_reason === 'length',
       usage: {
         inputTokens: usage?.prompt_tokens ?? 0,
         cachedInputTokens: cached,
@@ -113,6 +115,13 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       model,
       ms: Date.now() - started,
     };
+
+    if (result.truncated) {
+      logger.warn(
+        { task: req.task, model, outputTokens: result.usage.outputTokens, empty: result.text === '' },
+        'response hit max_tokens — raise maxOutputTokens for this task',
+      );
+    }
 
     if (result.usage.inputTokens > 2_000 && cached === 0) {
       // Not fatal, and some gateways simply do not report cache hits — but if the upstream

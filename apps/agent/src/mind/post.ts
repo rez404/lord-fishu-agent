@@ -162,10 +162,16 @@ async function criticise(deps: PostDeps, text: string): Promise<{ ok: boolean; w
       'FAIL if it is forgettable.\n' +
       'PASS if a person could plausibly have typed it into their phone without rereading it.',
     user: text,
-    maxOutputTokens: 80,
+    maxOutputTokens: 500,
     effort: 'low',
   });
   await recordCall(deps.db, 'critic', result, 'post:critic');
+
+  if (result.text === '' || result.truncated) {
+    // Fail closed, but say so. Silently reading "the model produced nothing" as "the draft
+    // is bad" hides a broken budget behind what looks like an opinion about the writing.
+    return { ok: false, why: 'the critic did not answer (response truncated)' };
+  }
 
   const [verdict = '', ...rest] = result.text.split('\n');
   return { ok: /^\s*pass/i.test(verdict), why: rest.join(' ').trim() || verdict.trim() };

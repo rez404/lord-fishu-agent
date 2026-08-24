@@ -148,12 +148,15 @@ async function postIfDue(
     await think(db, 'utterance', outcome.text, { mood: mind.mood, meta: { tweetId: result.tweetId } });
     if (impulse) await closeImpulse(db, impulse.id, 'used', row?.id);
     else await closeSlot(db, slot!.id, 'posted', row?.id);
-    await log(db, 'post', 'ok', null, {
-      slot: slot?.slot,
-      impulse: impulse?.id,
-      tweetId: result.tweetId,
-      dryRun: result.dryRun,
-    });
+    await log(
+      db,
+      'post',
+      'ok',
+      // An operator reading "post ok" will look for it on the timeline. Say plainly when
+      // there is nothing there to find.
+      result.dryRun ? 'dry run — composed, not sent' : null,
+      { slot: slot?.slot, impulse: impulse?.id, tweetId: result.tweetId, dryRun: result.dryRun },
+    );
     return 1;
   } catch (err) {
     if (err instanceof QuotaExceededError) {
@@ -322,7 +325,7 @@ async function answerPending(
 
       await think(db, 'utterance', outcome.text, { mood: mind.mood, meta: { tweetId: result.tweetId } });
       await settle(db, mention.tweetId, 'replied');
-      await log(db, 'reply', 'ok', null, {
+      await log(db, 'reply', 'ok', result.dryRun ? 'dry run — composed, not sent' : null, {
         tweetId: result.tweetId,
         inReplyTo: mention.tweetId,
         followers: mention.authorFollowers,

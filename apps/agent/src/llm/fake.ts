@@ -16,6 +16,7 @@ export class FakeLlmProvider implements LlmProvider {
     this.requests.push(req);
     return {
       text: this.responder(req).trim(),
+      truncated: false,
       usage: { inputTokens: 1_000, cachedInputTokens: 900, outputTokens: 40 },
       model: `fake-${req.task}`,
       ms: 1,

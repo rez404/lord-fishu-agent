@@ -39,6 +39,14 @@ export interface CompleteResult {
     outputTokens: number;
   };
   model: string;
+  /**
+   * The response hit max_tokens rather than finishing.
+   *
+   * On a reasoning model this is easy to cause and hard to see: reasoning tokens come out
+   * of the same completion budget, so a generous-looking cap can be consumed entirely by
+   * thinking and return empty content. Callers must not read an empty answer as an answer.
+   */
+  truncated: boolean;
   /** wall-clock, for the cost panel */
   ms: number;
 }

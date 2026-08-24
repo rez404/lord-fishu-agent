@@ -58,10 +58,18 @@ async function worthAnswering(deps: ReplyDeps, c: ReplyCandidate): Promise<{ yes
       'NO if it is a greeting, an emoji, pure noise, an obvious engagement farm, a request to ' +
       'promote another token, or a bot.',
     user: `Message: ${c.text}`,
-    maxOutputTokens: 80,
+    // Generous for a one-word answer, because the budget covers reasoning too and a
+    // truncated verdict is indistinguishable from a refusal.
+    maxOutputTokens: 400,
     effort: 'none',
   });
   await recordCall(deps.db, 'triage', result, 'reply:triage');
+
+  if (result.text === '' || result.truncated) {
+    // Fail *open* here, unlike the critic: triage only decides whether to look closer, and
+    // a broken screener should not silently mute every mention he receives.
+    return { yes: true, why: 'triage did not answer — looking anyway' };
+  }
 
   const [verdict = '', ...rest] = result.text.split('\n');
   return { yes: /^\s*yes/i.test(verdict), why: rest.join(' ').trim() || verdict.trim() };
@@ -110,10 +118,16 @@ async function criticise(deps: ReplyDeps, text: string, situation: string): Prom
       'of the observation; or if it is simply forgettable.\n' +
       'PASS only if you would stop scrolling for it.',
     user: `Situation: ${situation}\n\nLine: ${text}`,
-    maxOutputTokens: 80,
+    maxOutputTokens: 500,
     effort: 'low',
   });
   await recordCall(deps.db, 'critic', result, 'reply:critic');
+
+  if (result.text === '' || result.truncated) {
+    // Fail closed, but say so. Silently reading "the model produced nothing" as "the draft
+    // is bad" hides a broken budget behind what looks like an opinion about the writing.
+    return { ok: false, why: 'the critic did not answer (response truncated)' };
+  }
 
   const [verdict = '', ...rest] = result.text.split('\n');
   return { ok: /^\s*pass/i.test(verdict), why: rest.join(' ').trim() || verdict.trim() };
