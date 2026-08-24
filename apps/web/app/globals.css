@@ -592,3 +592,58 @@ a:hover { background: rgba(255, 193, 120, 0.12); }
   border-bottom: 0;
   font-variant-numeric: tabular-nums;
 }
+
+/* ── the token ──────────────────────────────────────────────────────────────
+   Block characters rather than a drawn chart: the only shape that belongs on a
+   terminal, and it does not pretend to a precision the data lacks. */
+
+.ticker {
+  margin: 1.1rem 0 0;
+  padding: 0.7rem 0 0.2rem;
+  border-top: 1px solid var(--phosphor-faint);
+}
+
+.ticker-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 1.4rem;
+  letter-spacing: 0.06em;
+}
+
+.ticker-price {
+  font-variant-numeric: tabular-nums;
+  color: var(--phosphor);
+}
+
+.spark {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 1.2rem;
+  margin: 0.35rem 0 0.2rem;
+}
+
+.spark-line {
+  letter-spacing: -0.06em;
+  color: var(--bio);
+  text-shadow: var(--glow-bio);
+  overflow: hidden;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.spark-line.spark-down {
+  color: var(--coral);
+  text-shadow: 0 0 10px rgba(255, 125, 108, 0.35);
+}
+
+.ticker-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1.4rem;
+  margin-top: 0.3rem;
+  color: var(--phosphor-dim);
+  text-shadow: none;
+  font-size: 0.9em;
+}

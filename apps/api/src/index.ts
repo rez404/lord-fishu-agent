@@ -7,6 +7,7 @@ import { loadApiEnv, logger } from '@fishnu/shared';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerLedgerRoutes } from './routes/ledger.js';
+import { registerTokenRoutes } from './routes/token.js';
 import { registerRoutes } from './routes/index.js';
 
 async function main() {
@@ -46,6 +47,7 @@ async function main() {
 
   await app.register(registerAdminRoutes, { db, token: env.ADMIN_TOKEN ?? null, wake });
   await app.register(registerLedgerRoutes, { db, redis: publisher, rpcUrl: env.SOLANA_RPC_URL });
+  await app.register(registerTokenRoutes, { db, redis: publisher });
   await app.register(registerAuthRoutes, {
     clientId: env.X_CLIENT_ID ?? null,
     clientSecret: env.X_CLIENT_SECRET ?? null,

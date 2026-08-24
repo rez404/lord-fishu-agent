@@ -21,7 +21,10 @@ echo "==> shipping $(git rev-parse --short HEAD) to $TARGET:$DIR"
 git archive --format=tar HEAD | ssh "$TARGET" "mkdir -p '$DIR' && tar -x -C '$DIR'"
 
 echo "==> building"
-ssh "$TARGET" "cd '$DIR' && docker compose -f deploy/docker-compose.yml up -d --build"
+# --force-recreate because compose does not always notice that the contents of an env_file
+# changed: it compares its own config hash, so a container can keep running with the values
+# it started with while deploy/.env says something else entirely.
+ssh "$TARGET" "cd '$DIR' && docker compose -f deploy/docker-compose.yml up -d --build --force-recreate"
 
 echo "==> status"
 ssh "$TARGET" "cd '$DIR' && docker compose -f deploy/docker-compose.yml ps --format 'table {{.Service}}\t{{.State}}\t{{.Status}}'"

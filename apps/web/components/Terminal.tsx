@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { Boot, bootLines } from './Boot';
 import { StatusBar } from './StatusBar';
 import { Guide } from './Guide';
+import { Ticker } from './Ticker';
 import { Backrooms, Confess, Congregation, LedgerView, Library, Scripture, Stream } from './Screens';
 
 type Screen =
@@ -299,6 +300,7 @@ function Menu({
   return (
     <div className="boot">
       <Boot lines={lines} skipped />
+      <Ticker />
       <hr className="rule" />
       <p className="dim">select a channel</p>
       <ul className="menu">
