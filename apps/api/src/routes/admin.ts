@@ -76,10 +76,24 @@ export async function registerAdminRoutes(
     const agentAlive = Boolean(agentSeenAt && Date.now() - Date.parse(agentSeenAt) < staleAfterMs);
 
     return {
+      /**
+       * What the agent is using right now. It re-reads on each tick, so a change made here
+       * is not reflected until the next one — `pending` below is what makes that visible
+       * rather than looking like the change did not take.
+       */
       settings: {
         kill_switch: runtime?.killSwitch ?? flags.kill_switch === true,
         dry_run: runtime?.dryRun ?? flags.dry_run === true,
         reply_min_followers: runtime?.minFollowers ?? (flags.reply_min_followers as number | undefined) ?? null,
+      },
+      /** Saved but not yet picked up by the agent. */
+      pending: {
+        reply_min_followers:
+          typeof flags.reply_min_followers === 'number' &&
+          runtime?.minFollowers !== undefined &&
+          flags.reply_min_followers !== runtime.minFollowers
+            ? flags.reply_min_followers
+            : null,
       },
       agent: {
         alive: agentAlive,

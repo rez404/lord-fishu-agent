@@ -16,6 +16,7 @@ interface AdminState {
   /** switches pinned on by the environment — this console cannot turn them off */
   envForced: { kill_switch: boolean; dry_run: boolean };
   agent: { alive: boolean; seenAt: string | null; xEnabled: boolean; account: string | null };
+  pending: { reply_min_followers: number | null };
   knowledge: {
     links: Array<{ label: string; url: string }>;
     facts: string;
@@ -238,8 +239,17 @@ export default function Admin() {
                   <span className="menu-key">↵</span>
                   <span className="menu-name">SET</span>
                   <span className="menu-desc">
-                    currently {state.settings.reply_min_followers ?? '—'} · below this he reads and
-                    stays quiet, and parked mentions are kept in case you lower it
+                    {state.pending.reply_min_followers !== null ? (
+                      <span className="bio">
+                        saved as {state.pending.reply_min_followers} · he is still using{' '}
+                        {state.settings.reply_min_followers} until his next tick
+                      </span>
+                    ) : (
+                      <>
+                        currently {state.settings.reply_min_followers ?? '—'} · below this he reads
+                        and stays quiet, and parked mentions are kept in case you lower it
+                      </>
+                    )}
                   </span>
                 </button>
               </div>
