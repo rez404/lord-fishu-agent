@@ -15,6 +15,7 @@ interface AdminState {
   settings: { kill_switch: boolean; dry_run: boolean; reply_min_followers: number | null };
   /** switches pinned on by the environment — this console cannot turn them off */
   envForced: { kill_switch: boolean; dry_run: boolean };
+  agent: { alive: boolean; seenAt: string | null; xEnabled: boolean; account: string | null };
   counts: { posts: number; thoughts: number; pendingImpulses: number };
   cost: { usd: string; calls: number; cachePct: number };
   impulses: Array<{ id: number; body: string; status: string; createdAt: string }>;
@@ -116,6 +117,24 @@ export default function Admin() {
             <div className="scroll">
               {/* The two switches that matter, and what they actually do. */}
               <p className="book">STATE</p>
+              {/* Everything below describes the agent. If it is not running, say so first
+                  rather than presenting its last known switches as current. */}
+              <div className="entry entry-meta">
+                {state.agent.alive ? (
+                  <>
+                    agent <span className="bio">running</span>
+                    {state.agent.account ? ` as @${state.agent.account}` : ''}
+                    {!state.agent.xEnabled && <span className="coral"> · no X credentials</span>}
+                    {state.agent.seenAt && ` · last seen ${state.agent.seenAt.slice(11, 16)}`}
+                  </>
+                ) : (
+                  <span className="coral">
+                    agent has not reported in
+                    {state.agent.seenAt ? ` since ${state.agent.seenAt.slice(5, 16).replace('T', ' ')}` : ' at all'}
+                    {' '}— the switches below are its last known state, not its current one
+                  </span>
+                )}
+              </div>
               <div className="entry">
                 <button
                   className="menu-item"

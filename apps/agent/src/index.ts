@@ -74,6 +74,26 @@ async function main() {
     );
   }
 
+  /**
+   * What the agent is actually doing, written where the console can read it.
+   *
+   * The console used to infer this from its own environment, which only worked because
+   * both containers happen to read the same env file — restart one without the other and
+   * the panel confidently reports the wrong thing. The agent is the only process that
+   * knows, so it says so, and the timestamp doubles as a heartbeat.
+   */
+  const report = async () => {
+    await settingsStore.set('runtime', {
+      dryRun: await settingsStore.dryRun(),
+      killSwitch: await settingsStore.killSwitchEngaged(),
+      xEnabled,
+      account: xEnabled ? env.X_USERNAME : null,
+      minFollowers: await settingsStore.replyMinFollowers(),
+      at: new Date().toISOString(),
+    });
+  };
+  await report().catch((err) => logger.warn({ err }, 'could not report runtime state'));
+
   let running = true;
   const stop = (signal: string) => {
     logger.info({ signal }, 'shutting down');
@@ -137,6 +157,7 @@ async function main() {
 
       s.lastTickAt = new Date();
       s.lastTickError = null;
+      await report().catch(() => {});
     } catch (err) {
       // A tick must never kill the process: 24/7 uptime is the whole point of Phase 0.
       s.lastTickAt = new Date();

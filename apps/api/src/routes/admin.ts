@@ -55,29 +55,44 @@ export async function registerAdminRoutes(
     const flags = Object.fromEntries(rows.map((r) => [r.key, r.value]));
 
     /**
-     * What is actually true, not what the database says.
+     * What the agent reports about itself, not what this process's environment says.
      *
-     * The agent lets the environment override both switches — DRY_RUN and KILL_SWITCH in
-     * the env win over the stored value, deliberately, so a boot-time hard stop cannot be
-     * undone from a web page. That means the stored flag on its own is a lie: an operator
-     * could toggle DRY RUN off here, see it go off, and still be posting nothing. Report
-     * the effective value and say when the environment is the one deciding.
+     * Both switches can be pinned by the environment — deliberately, so a boot-time hard
+     * stop cannot be undone from a web page — which means the stored flag alone is a lie.
+     * Reading this API's own env was worse: it is a different container, and restarting
+     * one without the other made the console confidently report the wrong state.
      */
-    const envForced = {
-      kill_switch: process.env.KILL_SWITCH === 'true' || process.env.KILL_SWITCH === '1',
-      dry_run: process.env.DRY_RUN === 'true' || process.env.DRY_RUN === '1',
-    };
+    const runtime = flags.runtime as
+      | { dryRun: boolean; killSwitch: boolean; xEnabled: boolean; account: string | null; minFollowers: number; at: string }
+      | undefined;
+
+    // A report older than a few ticks means the agent is not running, and the switches it
+    // last described are history rather than status.
+    const staleAfterMs = 20 * 60_000;
+    const agentSeenAt = runtime?.at ?? null;
+    const agentAlive = Boolean(agentSeenAt && Date.now() - Date.parse(agentSeenAt) < staleAfterMs);
 
     return {
       settings: {
-        kill_switch: envForced.kill_switch || flags.kill_switch === true,
-        dry_run: envForced.dry_run || flags.dry_run === true,
-        reply_min_followers:
-          (flags.reply_min_followers as number | undefined) ??
-          Number(process.env.REPLY_MIN_FOLLOWERS ?? 1000),
+        kill_switch: runtime?.killSwitch ?? flags.kill_switch === true,
+        dry_run: runtime?.dryRun ?? flags.dry_run === true,
+        reply_min_followers: runtime?.minFollowers ?? (flags.reply_min_followers as number | undefined) ?? null,
       },
-      /** Switches the environment is pinning on, which this console cannot turn off. */
-      envForced,
+      agent: {
+        alive: agentAlive,
+        seenAt: agentSeenAt,
+        xEnabled: runtime?.xEnabled ?? false,
+        account: runtime?.account ?? null,
+      },
+      /**
+       * A switch the console can turn off is one the agent read from the database. One it
+       * cannot is pinned in the environment — the toggle would write a value the agent
+       * then ignores, so it is disabled instead.
+       */
+      envForced: {
+        kill_switch: (runtime?.killSwitch ?? false) && flags.kill_switch !== true,
+        dry_run: (runtime?.dryRun ?? false) && flags.dry_run !== true,
+      },
       counts: {
         posts: postCount?.n ?? 0,
         thoughts: thoughtCount?.n ?? 0,
