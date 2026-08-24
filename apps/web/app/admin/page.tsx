@@ -35,7 +35,7 @@ interface AdminState {
     wallet: { address: string } | null;
   };
   counts: { posts: number; thoughts: number; pendingImpulses: number };
-  cost: { usd: string; calls: number; cachePct: number };
+  cost: { usd: string; calls: number; cachePct: number; cacheableCalls: number };
   impulses: Array<{ id: number; body: string; status: string; createdAt: string }>;
   recent: Array<{ id: number; action: string; status: string; reason: string | null; createdAt: string }>;
 }
@@ -278,7 +278,9 @@ export default function Admin() {
                 {state.counts.posts} posts · {state.counts.thoughts} thoughts ·{' '}
                 ${Number(state.cost.usd).toFixed(2)} over 30d across {state.cost.calls} calls ·{' '}
                 {state.cost.cachePct}% cached
-                {state.cost.cachePct < 40 && state.cost.calls > 20 && (
+                {/* Judged only on the calls big enough to be cacheable, and only once
+                    there are enough of them to mean anything. */}
+                {state.cost.cachePct < 40 && state.cost.cacheableCalls > 30 && (
                   <span className="coral"> — low cache, the frozen prompt is being invalidated</span>
                 )}
               </div>

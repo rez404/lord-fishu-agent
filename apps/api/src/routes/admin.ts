@@ -46,7 +46,19 @@ export async function registerAdminRoutes(
         .select({
           usd: sql<string>`coalesce(sum(${llmCalls.costUsd}), 0)::text`,
           calls: sql<number>`count(*)::int`,
-          cachePct: sql<number>`coalesce(round(100.0 * sum(${llmCalls.cachedInputTokens}) / nullif(sum(${llmCalls.inputTokens}), 0)), 0)::int`,
+          /*
+           * Only over calls large enough to be cacheable.
+           *
+           * Providers will not cache a prefix below roughly a thousand tokens, and triage
+           * and critic prompts are a couple of hundred — counting them dragged the figure
+           * to 30% and set off a warning about the frozen prompt being invalidated when
+           * nothing was wrong. A number that cries wolf gets ignored on the day it matters.
+           */
+          cachePct: sql<number>`coalesce(round(
+            100.0 * sum(${llmCalls.cachedInputTokens}) filter (where ${llmCalls.inputTokens} >= 1024)
+                  / nullif(sum(${llmCalls.inputTokens}) filter (where ${llmCalls.inputTokens} >= 1024), 0)
+          ), 0)::int`,
+          cacheableCalls: sql<number>`count(*) filter (where ${llmCalls.inputTokens} >= 1024)::int`,
         })
         .from(llmCalls)
         .where(sql`${llmCalls.createdAt} > now() - interval '30 days'`),
