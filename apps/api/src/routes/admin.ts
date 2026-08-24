@@ -1,7 +1,7 @@
 import { desc, eq, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Db } from '@fishnu/db';
-import { actionLog, impulses, llmCalls, posts, settings, thoughts } from '@fishnu/db';
+import { actionLog, impulses, llmCalls, postSchedule, posts, settings, thoughts } from '@fishnu/db';
 
 /**
  * The operator's controls.
@@ -38,7 +38,7 @@ export async function registerAdminRoutes(
   };
 
   app.get('/admin/state', { preHandler: guard }, async () => {
-    const [[postCount], [thoughtCount], [pending], cost, recent, queue] = await Promise.all([
+    const [[postCount], [thoughtCount], [pending], cost, recent, queue, plan] = await Promise.all([
       db.select({ n: sql<number>`count(*)::int` }).from(posts),
       db.select({ n: sql<number>`count(*)::int` }).from(thoughts),
       db.select({ n: sql<number>`count(*)::int` }).from(impulses).where(eq(impulses.status, 'pending')),
@@ -52,6 +52,11 @@ export async function registerAdminRoutes(
         .where(sql`${llmCalls.createdAt} > now() - interval '30 days'`),
       db.select().from(actionLog).orderBy(desc(actionLog.createdAt)).limit(20),
       db.select().from(impulses).orderBy(desc(impulses.createdAt)).limit(20),
+      db
+        .select()
+        .from(postSchedule)
+        .where(sql`${postSchedule.dueAt} > now() - interval '18 hours'`)
+        .orderBy(postSchedule.dueAt),
     ]);
 
     const rows = await db.select().from(settings);
@@ -66,7 +71,19 @@ export async function registerAdminRoutes(
      * one without the other made the console confidently report the wrong state.
      */
     const runtime = flags.runtime as
-      | { dryRun: boolean; killSwitch: boolean; xEnabled: boolean; account: string | null; minFollowers: number; at: string }
+      | {
+          dryRun: boolean;
+          killSwitch: boolean;
+          xEnabled: boolean;
+          account: string | null;
+          minFollowers: number;
+          sleepWindow?: string;
+          asleep?: boolean;
+          postsPerDay?: number;
+          gapMinutes?: number;
+          backroomsEveryHours?: number;
+          at: string;
+        }
       | undefined;
 
     // A report older than a few ticks means the agent is not running, and the switches it
@@ -100,7 +117,18 @@ export async function registerAdminRoutes(
         seenAt: agentSeenAt,
         xEnabled: runtime?.xEnabled ?? false,
         account: runtime?.account ?? null,
+        asleep: runtime?.asleep ?? false,
+        sleepWindow: runtime?.sleepWindow ?? '',
+        postsPerDay: runtime?.postsPerDay ?? null,
+        gapMinutes: runtime?.gapMinutes ?? null,
+        backroomsEveryHours: runtime?.backroomsEveryHours ?? null,
       },
+      /** Today's plan and whatever is left of yesterday's, so a quiet hour is legible. */
+      plan: plan.map((p) => ({
+        dueAt: p.dueAt.toISOString(),
+        outcome: p.outcome,
+        angle: p.angle,
+      })),
       /**
        * A switch the console can turn off is one the agent read from the database. One it
        * cannot is pinned in the environment — the toggle would write a value the agent

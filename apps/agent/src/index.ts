@@ -89,6 +89,13 @@ async function main() {
       xEnabled,
       account: xEnabled ? env.X_USERNAME : null,
       minFollowers: await settingsStore.replyMinFollowers(),
+      // The shape of his day, so the console can explain a quiet hour instead of leaving
+      // the operator to guess whether something is broken.
+      sleepWindow: env.SLEEP_WINDOW_UTC,
+      asleep: inSleepWindow(env.SLEEP_WINDOW_UTC),
+      postsPerDay: env.POSTS_PER_DAY,
+      gapMinutes: env.MIN_POST_GAP_MINUTES,
+      backroomsEveryHours: env.BACKROOMS_EVERY_HOURS,
       at: new Date().toISOString(),
     });
   };

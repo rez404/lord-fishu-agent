@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import { API_URL } from '../../lib/api';
 
 /**
@@ -15,7 +15,18 @@ interface AdminState {
   settings: { kill_switch: boolean; dry_run: boolean; reply_min_followers: number | null };
   /** switches pinned on by the environment — this console cannot turn them off */
   envForced: { kill_switch: boolean; dry_run: boolean };
-  agent: { alive: boolean; seenAt: string | null; xEnabled: boolean; account: string | null };
+  agent: {
+    alive: boolean;
+    seenAt: string | null;
+    xEnabled: boolean;
+    account: string | null;
+    asleep: boolean;
+    sleepWindow: string;
+    postsPerDay: number | null;
+    gapMinutes: number | null;
+    backroomsEveryHours: number | null;
+  };
+  plan: Array<{ dueAt: string; outcome: string | null; angle: string }>;
   pending: { reply_min_followers: number | null };
   knowledge: {
     links: Array<{ label: string; url: string }>;
@@ -182,6 +193,11 @@ export default function Admin() {
                     {state.agent.account ? ` as @${state.agent.account}` : ''}
                     {!state.agent.xEnabled && <span className="coral"> · no X credentials</span>}
                     {state.agent.seenAt && ` · last seen ${state.agent.seenAt.slice(11, 16)}`}
+                    {/* A quiet hour has a reason. Saying it beats letting the operator
+                        wonder whether something is broken. */}
+                    {state.agent.asleep && (
+                      <span className="bio"> · asleep until {state.agent.sleepWindow.split('-')[1]} UTC</span>
+                    )}
                   </>
                 ) : (
                   <span className="coral">

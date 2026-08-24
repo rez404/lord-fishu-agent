@@ -582,3 +582,13 @@ a:hover { background: rgba(255, 193, 120, 0.12); }
 .holdings > span:nth-child(even) {
   font-variant-numeric: tabular-nums;
 }
+
+/* The day, as two columns: when, and what for. */
+.plan {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.3rem 2ch;
+  align-items: baseline;
+  border-bottom: 0;
+  font-variant-numeric: tabular-nums;
+}
