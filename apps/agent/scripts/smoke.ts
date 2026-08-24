@@ -1510,6 +1510,52 @@ async function main() {
     check('it is set aside rather than retried forever', row?.status === 'ignored', String(row?.status));
   }
 
+  // ── 42. selectivity is rationing, and only when the budget is scarce ───────
+  console.log('\nquiet day vs busy day');
+  await reset();
+  {
+    const quota = new QuotaManager(db, env);
+    const cursors = new CursorStore(db);
+
+    // Exactly the case that looked broken in production: a real person says hello.
+    const llm = cooperative();
+    const x = new FakeXClient([mention('1601', 'someone', 414)], quota);
+    await runTick({
+      db, x, cursors, dryRun: false, minFollowers: 100,
+      postsPerDay: 0, sleepWindow: '', backroomsTurns: 0, mind: mind(llm),
+    });
+
+    const quiet = llm.requests.find((r) => r.task === 'triage')!;
+    check(
+      'on a quiet day he would rather answer than ignore',
+      quiet.frozenSystem.includes('plenty of replies left') &&
+        quiet.frozenSystem.includes('including a bare greeting'),
+    );
+    check('and he answers', x.published.length === 1, `got ${x.published.length}`);
+
+    // Now he has already said a great deal today.
+    await db.insert(posts).values(
+      Array.from({ length: 25 }, (_, i) => ({ kind: 'reply', text: `earlier reply ${i}`, dryRun: 'false' })),
+    );
+
+    const llm2 = cooperative();
+    const x2 = new FakeXClient([mention('1602', 'another', 414)], quota);
+    await runTick({
+      db, x: x2, cursors, dryRun: false, minFollowers: 100,
+      postsPerDay: 0, sleepWindow: '', backroomsTurns: 0, mind: mind(llm2),
+    });
+
+    const busy = llm2.requests.find((r) => r.task === 'triage')!;
+    check(
+      'once he is busy the bar goes up',
+      busy.frozenSystem.includes('few replies left') && busy.frozenSystem.includes('Be selective'),
+    );
+    check(
+      'and a greeting is no longer automatically worth a line',
+      busy.frozenSystem.includes('NO if it is a greeting'),
+    );
+  }
+
   await reset();
   await redis.quit();
 

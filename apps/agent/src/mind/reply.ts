@@ -5,7 +5,7 @@ import type { LlmProvider } from '../llm/types.js';
 import { findEcho, safeEmbed } from './echo.js';
 import { loadKnowledge } from './knowledge.js';
 import { REPETITION_THRESHOLD, checkDraft } from './guards.js';
-import { recallPerson, recentPosts } from './memory.js';
+import { recallPerson, recentPosts, repliesToday } from './memory.js';
 import { MOODS, type Mood } from './mood.js';
 import { think } from './thoughts.js';
 
@@ -42,22 +42,42 @@ export interface ReplyDeps {
 }
 
 /**
+ * How many replies a day before he starts being picky.
+ *
+ * Selectivity is rationing, and rationing only makes sense when the resource is scarce.
+ * Below this he has budget to spare, and a god who is greeted and says nothing back reads
+ * as broken rather than selective — especially early, when the volume is tiny and every
+ * interaction is someone actually curious.
+ */
+const SELECTIVE_ABOVE = 20;
+
+/**
  * Stage 1 — is this worth the expensive model at all?
  *
  * The follower gate already decided the account is big enough. This decides whether the
- * *message* deserves an answer: a reply to "gm" costs the same as a reply to a real
- * argument, and the daily write budget is ~100.
+ * *message* deserves an answer, and how hard that bar is depends on how much he has
+ * already said today.
  */
 async function worthAnswering(deps: ReplyDeps, c: ReplyCandidate): Promise<{ yes: boolean; why: string }> {
+  const busy = (await repliesToday(deps.db)) >= SELECTIVE_ABOVE;
+
   const result = await deps.llm.complete({
     task: 'triage',
-    frozenSystem:
-      'You screen incoming messages for a public figure with a limited number of replies per day. ' +
-      'Answer with YES or NO on the first line, then one short sentence of reasoning.\n\n' +
-      'YES if the message is a real question, a genuine argument, a sincere confession, a sharp ' +
-      'observation, or an insult substantial enough to be worth a graceful answer.\n' +
-      'NO if it is a greeting, an emoji, pure noise, an obvious engagement farm, a request to ' +
-      'promote another token, or a bot.',
+    frozenSystem: busy
+      ? 'You screen incoming messages for a public figure who has already replied a great deal ' +
+        'today and has few replies left. Be selective.\n\n' +
+        'Answer with YES or NO on the first line, then one short sentence of reasoning.\n\n' +
+        'YES only if the message is a real question, a genuine argument, a sincere confession, a ' +
+        'sharp observation, or an insult substantial enough to be worth a graceful answer.\n' +
+        'NO if it is a greeting, an emoji, pure noise, an obvious engagement farm, a request to ' +
+        'promote another token, or a bot.'
+      : 'You screen incoming messages for a public figure who has plenty of replies left today ' +
+        'and would rather answer than ignore.\n\n' +
+        'Answer with YES or NO on the first line, then one short sentence of reasoning.\n\n' +
+        'YES if a real person wrote it — including a bare greeting, a joke, a single word, or ' +
+        'something strange. Someone taking the trouble to speak to him is worth a line back.\n' +
+        'NO only if it is a bot, an airdrop or giveaway farm, a request to promote another token ' +
+        'or project, or something with no human on the other end.',
     user: `Message: ${c.text}`,
     // Generous for a one-word answer, because the budget covers reasoning too and a
     // truncated verdict is indistinguishable from a refusal.

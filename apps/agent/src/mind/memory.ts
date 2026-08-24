@@ -79,3 +79,12 @@ export async function congregationSize(db: Db): Promise<number> {
     .where(and(isNotNull(people.username)));
   return row?.n ?? 0;
 }
+
+/** How much he has already said today, for deciding how selective to be. */
+export async function repliesToday(db: Db): Promise<number> {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(posts)
+    .where(and(eq(posts.kind, 'reply'), sql`${posts.createdAt} >= date_trunc('day', now() at time zone 'utc')`));
+  return row?.n ?? 0;
+}
