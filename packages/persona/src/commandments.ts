@@ -89,3 +89,28 @@ export const COMMANDMENTS: readonly Commandment[] = [
 export function commandmentsAsScripture(): string {
   return COMMANDMENTS.map((c) => `${c.number}. ${c.text}\n   (${c.gloss})`).join('\n');
 }
+
+/**
+ * Does this line quote the law itself?
+ *
+ * The critic has no standing over scripture. Asked for the third chickenmandment he
+ * produced exactly "Thou shalt work for your bags." and it was refused twice for sounding
+ * like hustle advice — which it is, because the religion is hustle advice, and a judge of
+ * whether something sounds like Lord Fishnu cannot be allowed to veto Lord Fishnu's own
+ * canon. Telling the critic to make an exception did not work; taking the question away
+ * from it does.
+ *
+ * Matched on the whole commandment rather than a phrase, so a passing echo of a few words
+ * does not buy a draft its way past judgement.
+ */
+export function quotesTheLaw(text: string): boolean {
+  const normalise = (v: string) =>
+    v
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const line = normalise(text);
+  return COMMANDMENTS.some((c) => line.includes(normalise(c.text)));
+}

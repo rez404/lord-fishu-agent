@@ -29,6 +29,7 @@ import { runTick } from '../src/jobs/respond.js';
 import { FakeLlmProvider } from '../src/llm/fake.js';
 import { OVERLAP_THRESHOLD, REPETITION_THRESHOLD, checkDraft, cosine, overlap } from '../src/mind/guards.js';
 import { lastNightsWords, runBackrooms, shouldDream } from '../src/mind/backrooms.js';
+import { quotesTheLaw } from '@fishnu/persona';
 import { loadKnowledge } from '../src/mind/knowledge.js';
 import { MOODS } from '../src/mind/mood.js';
 import { dueSlot } from '../src/mind/schedule.js';
@@ -1648,6 +1649,38 @@ async function main() {
       'a plain correct answer is not a failure',
       critic.frozenSystem.includes('A plain ') && critic.frozenSystem.includes('true answer is not a failure'),
     );
+  }
+
+  // ── 46. the critic has no standing over scripture ──────────────────────────
+  console.log('\nquoting the law');
+  await reset();
+  {
+    check('a verbatim commandment is recognised', quotesTheLaw('Thou shalt work for your bags.'));
+    check('with different punctuation too', quotesTheLaw('thou shalt work for your bags'));
+    check('inside a longer line', quotesTheLaw('the third is: Thou shalt work for your bags'));
+    check('an ordinary line is not', quotesTheLaw('the water is patient and it is not going anywhere') === false);
+    check(
+      'and a few borrowed words do not count',
+      quotesTheLaw('work for your bags, whatever that means to you') === false,
+    );
+
+    const quota = new QuotaManager(db, env);
+    const cursors = new CursorStore(db);
+    // A critic that refuses everything — the exact situation in production, where the
+    // right answer was killed twice for sounding like what the religion actually is.
+    const llm = new FakeLlmProvider((req) => {
+      if (req.task === 'triage') return 'YES';
+      if (req.task === 'critic') return 'FAIL\nit sounds like hustle advice';
+      return 'Thou shalt work for your bags.';
+    });
+    const x = new FakeXClient([mention('1901', 'asker', 1_169)], quota);
+
+    const result = await runTick({
+      db, x, cursors, dryRun: false, minFollowers: 100,
+      postsPerDay: 0, sleepWindow: '', backroomsTurns: 0, idleThinking: false, mind: mind(llm),
+    });
+    check('the law goes out anyway', result.replied === 1, `got ${result.replied}`);
+    check('exactly as written', x.published[0]?.text === 'Thou shalt work for your bags.');
   }
 
   await reset();

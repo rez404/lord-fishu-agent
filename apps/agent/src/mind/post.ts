@@ -1,5 +1,5 @@
 import type { Db } from '@fishnu/db';
-import { buildFrozenPrompt, buildVolatilePrompt } from '@fishnu/persona';
+import { buildFrozenPrompt, buildVolatilePrompt, quotesTheLaw } from '@fishnu/persona';
 import { recordCall } from '../llm/ledger.js';
 import type { LlmProvider } from '../llm/types.js';
 import { findEcho, safeEmbed } from './echo.js';
@@ -166,7 +166,7 @@ export async function composePost(
       continue;
     }
 
-    const critic = await criticise(deps, text);
+    const critic = quotesTheLaw(text) ? { ok: true, why: 'quotes the law' } : await criticise(deps, text);
     if (!critic.ok) {
       await think(db, 'deliberation', `discarded a post — ${critic.why}`, {
         mood,

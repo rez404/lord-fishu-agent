@@ -1,5 +1,5 @@
 import type { Db } from '@fishnu/db';
-import { buildFrozenPrompt, buildVolatilePrompt } from '@fishnu/persona';
+import { buildFrozenPrompt, buildVolatilePrompt, quotesTheLaw } from '@fishnu/persona';
 import { recordCall } from '../llm/ledger.js';
 import type { LlmProvider } from '../llm/types.js';
 import { findEcho, safeEmbed } from './echo.js';
@@ -193,7 +193,9 @@ export async function composeReply(deps: ReplyDeps, c: ReplyCandidate): Promise<
       continue;
     }
 
-    const critic = await criticise(deps, text, situation);
+    // Scripture goes out unjudged. Quoting the law correctly is the one thing he cannot
+    // do badly, and the critic kept refusing it for sounding like what it is.
+    const critic = quotesTheLaw(text) ? { ok: true, why: 'quotes the law' } : await criticise(deps, text, situation);
     if (!critic.ok) {
       await think(db, 'deliberation', `discarded a draft — ${critic.why}`, {
         mood,
