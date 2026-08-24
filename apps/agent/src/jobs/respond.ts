@@ -3,7 +3,7 @@ import type { Db } from '@fishnu/db';
 import { actionLog, inboundTweets, people, posts } from '@fishnu/db';
 import { logger } from '@fishnu/shared';
 import { runBackrooms, shouldDream } from '../mind/backrooms.js';
-import { closeConfession, pendingConfession } from '../mind/confession.js';
+import { closeConfession, confessionMayTakeSlot, pendingConfession } from '../mind/confession.js';
 import { closeImpulse, pendingImpulse } from '../mind/impulse.js';
 import { composePost } from '../mind/post.js';
 import { composeReply, type ReplyDeps } from '../mind/reply.js';
@@ -117,7 +117,7 @@ async function postIfDue(
    * busy hour becomes a wall of them — which is both what an automated account looks like
    * and a way for anyone to make him talk on demand.
    */
-  const confession = slot ? await pendingConfession(db) : null;
+  const confession = slot && (await confessionMayTakeSlot(db)) ? await pendingConfession(db) : null;
 
   let outcome;
   try {

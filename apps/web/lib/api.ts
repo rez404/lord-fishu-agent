@@ -56,6 +56,9 @@ export const api = {
   disconnect: () =>
     fetch(`${API_URL}/auth/x/logout`, { method: 'POST', credentials: 'include' }).catch(() => {}),
 
+  /** How many are waiting, so the page can be honest about the odds. */
+  confessQueue: () => get<{ waiting: number; answered: number }>('/api/confess'),
+
   confess: async (body: string): Promise<{ ok: boolean; error?: string }> => {
     try {
       const res = await fetch(`${API_URL}/api/confess`, {

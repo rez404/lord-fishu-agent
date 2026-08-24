@@ -330,9 +330,11 @@ export function Confess() {
   const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [error, setError] = useState('');
   const [who, setWho] = useState<{ enabled: boolean; visitor: { username: string } | null } | null>(null);
+  const [queue, setQueue] = useState<{ waiting: number; answered: number } | null>(null);
 
   useEffect(() => {
     void api.whoami().then(setWho);
+    void api.confessQueue().then(setQueue);
   }, []);
 
   async function submit(e: React.FormEvent) {
@@ -343,6 +345,7 @@ export function Confess() {
     if (res.ok) {
       setState('sent');
       setBody('');
+      void api.confessQueue().then(setQueue);
     } else {
       setError(res.error ?? 'refused');
       setState('error');
@@ -353,15 +356,26 @@ export function Confess() {
     <section className="view">
       <h2 className="view-title">CONFESS — speak to him</h2>
       <p className="hint">
-        he reads everything. he answers almost nothing. connect if you want to be answered
-        by name, where others can see it.
+        he reads everything. he answers almost nothing
+        {queue && queue.waiting > 0 ? ` — ${queue.waiting} waiting right now` : ''}. connect if
+        you want to be answered by name, where others can see it.
       </p>
       <div className="scroll">
         {state === 'sent' ? (
           <>
+            {/*
+              Vague reassurance reads as a broken form. The numbers are unflattering and
+              that is the point: someone who knows the odds and writes anyway is not
+              waiting for a reply that was never coming.
+            */}
             <Empty>
-              {'it is in the water now.\n\nwhether it surfaces is not up to you. he reads everything and answers ' +
-                'almost none of it — if he answers, it appears on x, and you can watch him decide in [1] STREAM.'}
+              {'it is in the water now.\n\n' +
+                (queue
+                  ? `${queue.waiting} other${queue.waiting === 1 ? ' is' : 's are'} waiting. he answers a ` +
+                    `few a day at most, alternating with whatever he wanted to say himself, and only when ` +
+                    `there is something worth saying back. it may be hours. it may be never.\n\n`
+                  : '') +
+                'if he answers, it appears on x. you can watch him decide in [1] STREAM.'}
             </Empty>
             {/* Without this the form is simply gone and there is no way to say a second
                 thing without leaving the channel and coming back. */}

@@ -116,6 +116,19 @@ export async function registerRoutes(
     return { session, messages };
   });
 
+  /** How many are waiting, so the confession page can be honest about the odds. */
+  app.get('/api/confess', async () => {
+    const [row] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(confessions)
+      .where(eq(confessions.status, 'pending'));
+    const [answered] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(confessions)
+      .where(eq(confessions.status, 'answered'));
+    return { waiting: row?.n ?? 0, answered: answered?.n ?? 0 };
+  });
+
   app.post<{ Body: { body?: string } }>('/api/confess', {
     config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
     handler: async (req, reply) => {
