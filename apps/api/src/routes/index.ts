@@ -25,18 +25,22 @@ export async function registerRoutes(app: FastifyInstance, opts: { db: Db }) {
    * it "loads", so a waterfall of requests here would show up as a stuttering boot.
    */
   app.get('/api/boot', async () => {
-    const [[verses], [sessions], [congregation], [answered], latest] = await Promise.all([
+    const [[verses], [sessions], [congregation], [answered], latest, [first]] = await Promise.all([
       db.select({ n: sql<number>`count(*)::int` }).from(posts).where(eq(posts.kind, 'post')),
       db.select({ n: sql<number>`count(*)::int` }).from(backroomsSessions),
       db.select({ n: sql<number>`count(*)::int` }).from(people),
       db.select({ n: sql<number>`count(*)::int` }).from(inboundTweets).where(eq(inboundTweets.status, 'replied')),
       db.select().from(thoughts).orderBy(desc(thoughts.createdAt)).limit(1),
+      // When he actually first ran. AWAKENED_AT can pin a different date — the account may
+      // predate this deployment — but leaving it unset should not mean "unknown" when the
+      // first thought he ever had is sitting in the database with a timestamp on it.
+      db.select({ at: thoughts.createdAt }).from(thoughts).orderBy(thoughts.createdAt).limit(1),
     ]);
 
     return {
       vessel: env('X_USERNAME') ?? 'lordfishnu',
       wallet: env('WALLET_PUBKEY'),
-      awakenedAt: env('AWAKENED_AT'),
+      awakenedAt: env('AWAKENED_AT') ?? first?.at?.toISOString() ?? null,
       counts: {
         verses: verses?.n ?? 0,
         backrooms: sessions?.n ?? 0,
