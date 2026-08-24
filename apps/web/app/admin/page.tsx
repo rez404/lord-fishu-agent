@@ -21,6 +21,7 @@ interface AdminState {
     links: Array<{ label: string; url: string }>;
     facts: string;
     contract: { address: string; chain: string; symbol: string } | null;
+    wallet: { address: string } | null;
   };
   counts: { posts: number; thoughts: number; pendingImpulses: number };
   cost: { usd: string; calls: number; cachePct: number };
@@ -43,6 +44,7 @@ export default function Admin() {
   const [address, setAddress] = useState('');
   const [chain, setChain] = useState('solana');
   const [symbol, setSymbol] = useState('');
+  const [wallet, setWallet] = useState('');
   const [knowledgeLoaded, setKnowledgeLoaded] = useState(false);
   const [threshold, setThreshold] = useState('');
   const [thresholdLoaded, setThresholdLoaded] = useState(false);
@@ -93,6 +95,7 @@ export default function Admin() {
     setAddress(state.knowledge.contract?.address ?? '');
     setChain(state.knowledge.contract?.chain || 'solana');
     setSymbol(state.knowledge.contract?.symbol ?? '');
+    setWallet(state.knowledge.wallet?.address ?? '');
     setKnowledgeLoaded(true);
   }, [state, knowledgeLoaded]);
 
@@ -132,6 +135,7 @@ export default function Admin() {
       }),
     facts,
     contract: address.trim() ? { address: address.trim(), chain, symbol } : null,
+    wallet: wallet.trim() ? { address: wallet.trim() } : null,
   });
 
   const saveKnowledge = () =>
@@ -375,6 +379,30 @@ export default function Admin() {
                 <button className="menu-item" disabled={busy} style={{ borderLeftColor: 'var(--bio)' }} onClick={saveKnowledge}>
                   <span className="menu-key">↵</span>
                   <span className="menu-name">SET CONTRACT</span>
+                </button>
+              </div>
+
+              <p className="book">SET WALLET</p>
+              <p className="hint">
+                Read-only. It is queried and never signed for — no key is involved and this
+                server cannot move a lamport. It fills [4] LEDGER, which is the one page here
+                whose claims a stranger can check against an explorer.
+              </p>
+              <div className="entry">
+                <input
+                  className="prompt-input"
+                  style={{ caretColor: 'var(--phosphor)', width: '100%' }}
+                  placeholder="his solana address"
+                  spellCheck={false}
+                  value={wallet}
+                  onChange={(e) => setWallet(e.target.value)}
+                />
+                <span className="entry-meta">
+                  {wallet.trim() ? `${wallet.trim().length} characters` : 'not set — the ledger stays empty'}
+                </span>
+                <button className="menu-item" disabled={busy} style={{ borderLeftColor: 'var(--bio)' }} onClick={saveKnowledge}>
+                  <span className="menu-key">↵</span>
+                  <span className="menu-name">SET WALLET</span>
                 </button>
               </div>
 

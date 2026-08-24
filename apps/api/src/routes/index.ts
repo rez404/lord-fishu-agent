@@ -116,12 +116,6 @@ export async function registerRoutes(
     return { session, messages };
   });
 
-  app.get('/api/ledger', async () => {
-    // Phase 4 fills this in. Reported honestly as unavailable rather than faked, so the
-    // terminal can say "the vessel holds nothing yet" instead of inventing a balance.
-    return { wallet: env('WALLET_PUBKEY'), holdings: [], transactions: [], live: false };
-  });
-
   app.post<{ Body: { body?: string } }>('/api/confess', {
     config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
     handler: async (req, reply) => {

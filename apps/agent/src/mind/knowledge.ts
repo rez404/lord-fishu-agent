@@ -15,9 +15,11 @@ export interface Knowledge {
   links: Array<{ label: string; url: string }>;
   facts: string;
   contract: Contract | null;
+  /** Read-only. He knows the address; nothing here can spend from it. */
+  wallet: string | null;
 }
 
-export const EMPTY_KNOWLEDGE: Knowledge = { links: [], facts: '', contract: null };
+export const EMPTY_KNOWLEDGE: Knowledge = { links: [], facts: '', contract: null, wallet: null };
 
 /**
  * Base58 (no 0/O/I/l) at Solana's length, or an EVM address.
@@ -46,6 +48,7 @@ export async function loadKnowledge(db: Db): Promise<Knowledge> {
   if (!value) return EMPTY_KNOWLEDGE;
 
   const contract = value.contract as Partial<Contract> | null | undefined;
+  const wallet = (value as { wallet?: { address?: string } | null }).wallet;
 
   return {
     links: Array.isArray(value.links)
@@ -62,5 +65,6 @@ export async function loadKnowledge(db: Db): Promise<Knowledge> {
             symbol: typeof contract.symbol === 'string' ? contract.symbol : '',
           }
         : null,
+    wallet: wallet && typeof wallet.address === 'string' && isAddress(wallet.address) ? wallet.address : null,
   };
 }

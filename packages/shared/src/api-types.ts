@@ -59,8 +59,10 @@ export interface Ledger {
   wallet: string | null;
   holdings: Array<{ symbol: string; amount: string; usd: number | null }>;
   transactions: Array<{ signature: string; kind: string; summary: string; at: string }>;
-  /** false until Phase 4 wires the wallet up; the terminal says so rather than faking it */
+  /** false when there is no wallet, or the chain did not answer — never a faked balance */
   live: boolean;
+  fetchedAt?: string;
+  error?: string;
 }
 
 export interface Believer {

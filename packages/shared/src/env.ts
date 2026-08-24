@@ -111,6 +111,8 @@ const apiSchema = z.object({
   SITE_URL: z.string().url().default('http://localhost:3000'),
   /** Signs visitor session cookies. Any long random string. */
   SESSION_SECRET: z.string().optional(),
+  /** Read-only chain access for the ledger. A public endpoint is fine at this volume. */
+  SOLANA_RPC_URL: z.string().url().default('https://api.mainnet-beta.solana.com'),
   /** Comma-separated list of allowed browser origins (the Vercel deployment + previews). */
   CORS_ORIGINS: z.string().default('http://localhost:3000'),
 });

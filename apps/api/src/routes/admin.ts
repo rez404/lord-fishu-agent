@@ -118,11 +118,9 @@ export async function registerAdminRoutes(
       cost: cost[0] ?? { usd: '0', calls: 0, cachePct: 0 },
       impulses: queue,
       recent,
-      knowledge: (flags.knowledge as { links?: unknown[]; facts?: string; contract?: unknown } | undefined) ?? {
-        links: [],
-        facts: '',
-        contract: null,
-      },
+      knowledge: (flags.knowledge as
+        | { links?: unknown[]; facts?: string; contract?: unknown; wallet?: unknown }
+        | undefined) ?? { links: [], facts: '', contract: null, wallet: null },
     };
   });
 
@@ -135,6 +133,7 @@ export async function registerAdminRoutes(
       links?: Array<{ label?: string; url?: string }>;
       facts?: string;
       contract?: { address?: string; chain?: string; symbol?: string } | null;
+      wallet?: { address?: string } | null;
     };
   }>('/admin/knowledge', { preHandler: guard }, async (req, reply) => {
       const links: Array<{ label: string; url: string }> = [];
@@ -175,7 +174,18 @@ export async function registerAdminRoutes(
       };
     }
 
-    const value = { links, facts, contract };
+    // Read-only: this address is only ever queried, never signed for. Still validated,
+    // because a typo here means the ledger quietly describes someone else's wallet.
+    let wallet: { address: string } | null = null;
+    const walletAddress = (req.body?.wallet?.address ?? '').trim();
+    if (walletAddress) {
+      if (!ADDRESS.test(walletAddress)) {
+        return reply.code(400).send({ error: `that is not an address: ${walletAddress}` });
+      }
+      wallet = { address: walletAddress };
+    }
+
+    const value = { links, facts, contract, wallet };
 
     await db
       .insert(settings)

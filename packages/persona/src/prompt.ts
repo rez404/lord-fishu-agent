@@ -35,6 +35,7 @@ export interface VolatileContext {
     links: Array<{ label: string; url: string }>;
     facts: string;
     contract?: { address: string; chain: string; symbol: string } | null;
+    wallet?: string | null;
   };
 }
 
@@ -171,7 +172,7 @@ ${ctx.situation}${knowledge}${said}`;
 }
 
 function renderKnowledge(k: VolatileContext['knowledge']): string {
-  if (!k || (k.links.length === 0 && !k.facts.trim() && !k.contract)) return '';
+  if (!k || (k.links.length === 0 && !k.facts.trim() && !k.contract && !k.wallet)) return '';
 
   const parts = ['\n\n# WHAT YOU KNOW'];
 
@@ -199,6 +200,14 @@ function renderKnowledge(k: VolatileContext['knowledge']): string {
         `type it from memory, and never produce any other address for any reason. People act ` +
         `on this with money. A wrong one costs them everything they send, and it would be ` +
         `your fault. If you are not certain, say where to find it instead of giving it.`,
+    );
+  }
+
+  if (k.wallet) {
+    parts.push(
+      `Your wallet is ${k.wallet}. Anyone can look inside it and many will. Do not describe ` +
+        `what it holds unless you have been told a figure — you cannot see the balance from ` +
+        `here and guessing at it in public is the kind of lie that gets checked.`,
     );
   }
 

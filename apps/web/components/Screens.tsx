@@ -223,7 +223,7 @@ export function LedgerView() {
     <section className="view">
       <h2 className="view-title">LEDGER — what the vessel holds</h2>
       <div className="scroll">
-        {!ledger?.live ? (
+        {!ledger?.wallet ? (
           <Empty>
             {'the vessel holds nothing yet.\n\nno wallet has been placed in its hands.\nwhen one is, every transaction it makes will be printed here,\nunedited, including the bad ones.'}
           </Empty>
@@ -231,15 +231,46 @@ export function LedgerView() {
           <>
             <div className="entry">
               <span className="dim">wallet </span>
-              {ledger.wallet}
+              <a
+                href={`https://solscan.io/account/${ledger.wallet}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {ledger.wallet}
+              </a>
+              {/* Read straight from the chain — say when it could not be read, rather than
+                  showing an empty wallet as though it were empty. */}
+              {!ledger.live && <span className="coral"> · {ledger.error ?? 'could not be read'}</span>}
             </div>
-            {ledger.holdings.map((h) => (
-              <div className="entry" key={h.symbol}>
-                <span className="bio">{h.symbol.padEnd(8)}</span>
-                {h.amount}
-                {h.usd !== null && <span className="dim"> · ${h.usd.toLocaleString('en-US')}</span>}
-              </div>
-            ))}
+
+            {ledger.live && (
+              <>
+                <p className="book">HOLDS</p>
+                {ledger.holdings.map((h) => (
+                  <div className="entry" key={h.symbol + h.amount}>
+                    <span className="bio">{h.symbol.padEnd(10)}</span>
+                    {h.amount}
+                  </div>
+                ))}
+
+                {ledger.transactions.length > 0 && (
+                  <>
+                    <p className="book">DID</p>
+                    {ledger.transactions.map((t) => (
+                      <div className="entry" key={t.signature}>
+                        <span className="entry-meta">
+                          {t.at ? t.at.slice(5, 16).replace('T', ' ') : '—'}{' '}
+                        </span>
+                        <a href={`https://solscan.io/tx/${t.signature}`} target="_blank" rel="noreferrer">
+                          {t.signature.slice(0, 8)}…{t.signature.slice(-8)}
+                        </a>
+                        {t.kind === 'failed' && <span className="coral"> · {t.summary}</span>}
+                      </div>
+                    ))}
+                  </>
+                )}
+              </>
+            )}
           </>
         )}
       </div>
