@@ -316,7 +316,26 @@ export function Confess() {
       </p>
       <div className="scroll">
         {state === 'sent' ? (
-          <Empty>{'it is in the water now.\n\nwhether it surfaces is not up to you.'}</Empty>
+          <>
+            <Empty>
+              {'it is in the water now.\n\nwhether it surfaces is not up to you. he reads everything and answers ' +
+                'almost none of it — if he answers, it appears on x, and you can watch him decide in [1] STREAM.'}
+            </Empty>
+            {/* Without this the form is simply gone and there is no way to say a second
+                thing without leaving the channel and coming back. */}
+            <button
+              className="menu-item"
+              type="button"
+              style={{ borderLeftColor: 'var(--bio)' }}
+              onClick={() => {
+                setState('idle');
+                setError('');
+              }}
+            >
+              <span className="menu-key">↵</span>
+              <span className="menu-name">SAY SOMETHING ELSE</span>
+            </button>
+          </>
         ) : (
           <form onSubmit={submit}>
             <div className="entry">

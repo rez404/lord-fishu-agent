@@ -5,6 +5,7 @@ import type { BootPayload } from '@fishnu/shared';
 import { api } from '../lib/api';
 import { Boot, bootLines } from './Boot';
 import { StatusBar } from './StatusBar';
+import { Guide } from './Guide';
 import { Backrooms, Confess, Congregation, LedgerView, Library, Scripture, Stream } from './Screens';
 
 type Screen =
@@ -15,7 +16,8 @@ type Screen =
   | 'backrooms'
   | 'ledger'
   | 'congregation'
-  | 'confess';
+  | 'confess'
+  | 'guide';
 
 interface Channel {
   key: string;
@@ -32,6 +34,7 @@ const CHANNELS: Channel[] = [
   { key: '4', name: 'ledger', label: 'LEDGER', desc: 'what the vessel holds' },
   { key: '5', name: 'congregation', label: 'CONGREGATION', desc: 'who he has spoken to' },
   { key: '0', name: 'confess', label: 'CONFESS', desc: 'speak to him' },
+  { key: '?', name: 'guide', label: 'GUIDE', desc: 'what this is, if you have just arrived' },
 ];
 
 export function Terminal() {
@@ -162,10 +165,7 @@ export function Terminal() {
         return;
       case 'help':
       case '?':
-        setNotice(
-          'type a number, or the name of a channel. `back` returns here. `reboot` starts over. ' +
-            'he is on x as @' + (boot?.vessel ?? 'lordfishnu') + '.',
-        );
+        setScreen('guide');
         return;
       case 'reboot':
         setBooted(false);
@@ -246,6 +246,8 @@ export function Terminal() {
           <LedgerView />
         ) : screen === 'congregation' ? (
           <Congregation />
+        ) : screen === 'guide' ? (
+          <Guide />
         ) : (
           <Confess />
         )}
@@ -274,7 +276,7 @@ export function Terminal() {
             </form>
             <p className="hint">
               {notice || (screen === 'menu'
-                ? 'type a number · or a word · `help`'
+                ? 'type a number · or a word · `?` if you have just arrived'
                 : '`back` or esc to return')}
             </p>
           </div>

@@ -533,3 +533,38 @@ a:hover { background: rgba(255, 193, 120, 0.12); }
   .book-why,
   .book-principle { margin-left: 0; }
 }
+
+/* ── the guide ──────────────────────────────────────────────────────────────
+   The one page written for someone who has just arrived, so it is the one page
+   that reads as a document rather than as a transcript. */
+
+.guide-prose {
+  max-width: 78ch;
+  white-space: pre-wrap;
+  line-height: 1.75;
+  border-bottom: 0;
+}
+
+.guide-keys {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.55rem 1.6rem;
+  align-items: baseline;
+  max-width: 84ch;
+  border-bottom: 0;
+}
+
+.guide-keys > span:nth-child(even) {
+  color: var(--phosphor-dim);
+  text-shadow: none;
+}
+
+@media (max-width: 40rem) {
+  .guide-keys {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+  }
+  .guide-keys > span:nth-child(even) {
+    margin-bottom: 0.7rem;
+  }
+}

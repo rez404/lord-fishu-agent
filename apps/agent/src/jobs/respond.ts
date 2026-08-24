@@ -3,6 +3,7 @@ import type { Db } from '@fishnu/db';
 import { actionLog, inboundTweets, people, posts } from '@fishnu/db';
 import { logger } from '@fishnu/shared';
 import { runBackrooms, shouldDream } from '../mind/backrooms.js';
+import { closeConfession, pendingConfession } from '../mind/confession.js';
 import { closeImpulse, pendingImpulse } from '../mind/impulse.js';
 import { composePost } from '../mind/post.js';
 import { composeReply, type ReplyDeps } from '../mind/reply.js';
@@ -108,11 +109,26 @@ async function postIfDue(
   const slot = impulse ? null : await dueSlot(db, opts);
   if (!impulse && !slot) return 0;
 
+  /*
+   * A confession fills the slot rather than creating one.
+   *
+   * That is the whole reason it is here and not in the impulse queue: however many people
+   * write in, the posting rate is unchanged. Letting visitors trigger posts would mean a
+   * busy hour becomes a wall of them — which is both what an automated account looks like
+   * and a way for anyone to make him talk on demand.
+   */
+  const confession = slot ? await pendingConfession(db) : null;
+
   let outcome;
   try {
-    outcome = await composePost(mind, slot?.angle ?? 'something that just happened', impulse?.body);
+    outcome = await composePost(
+      mind,
+      slot?.angle ?? 'something that just happened',
+      impulse?.body,
+      confession ? { body: confession.body, handle: confession.handle } : undefined,
+    );
   } catch (err) {
-    // Leave both open: the plan is for the day, not for this tick.
+    // Leave everything open: the plan is for the day, not for this tick.
     await log(db, 'post', 'error', String(err), { slot: slot?.slot, impulse: impulse?.id });
     logger.error({ err }, 'post composition failed');
     return 0;
@@ -124,8 +140,12 @@ async function postIfDue(
       // the next tick rather than being silently dropped after one bad draft.
       await log(db, 'post', 'skipped', outcome.reason, { impulse: impulse.id });
     } else if (slot) {
+      // A confession he had nothing to say to is closed, not retried forever — "he answers
+      // almost nothing" is the promise on the page, and an unanswerable one would otherwise
+      // block every slot after it.
+      if (confession) await closeConfession(db, confession.id, 'ignored');
       await closeSlot(db, slot.id, 'skipped');
-      await log(db, 'post', 'skipped', outcome.reason, { slot: slot.slot, angle: slot.angle });
+      await log(db, 'post', 'skipped', outcome.reason, { slot: slot.slot, confession: confession?.id });
     }
     return 0;
   }
@@ -143,13 +163,19 @@ async function postIfDue(
         embedding: outcome.embedding,
         meta: impulse
           ? { impulse: impulse.id, fact: impulse.body }
-          : { slot: slot!.slot, angle: slot!.angle, dueAt: slot!.dueAt.toISOString() },
+          : confession
+            ? { slot: slot!.slot, confession: confession.id, answering: confession.handle }
+            : { slot: slot!.slot, angle: slot!.angle, dueAt: slot!.dueAt.toISOString() },
       })
       .returning({ id: posts.id });
 
     await think(db, 'utterance', outcome.text, { mood: mind.mood, meta: { tweetId: result.tweetId } });
-    if (impulse) await closeImpulse(db, impulse.id, 'used', row?.id);
-    else await closeSlot(db, slot!.id, 'posted', row?.id);
+    if (impulse) {
+      await closeImpulse(db, impulse.id, 'used', row?.id);
+    } else {
+      if (confession) await closeConfession(db, confession.id, 'answered', row?.id);
+      await closeSlot(db, slot!.id, 'posted', row?.id);
+    }
     await log(
       db,
       'post',
