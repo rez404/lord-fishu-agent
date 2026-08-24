@@ -16,7 +16,11 @@ interface AdminState {
   /** switches pinned on by the environment — this console cannot turn them off */
   envForced: { kill_switch: boolean; dry_run: boolean };
   agent: { alive: boolean; seenAt: string | null; xEnabled: boolean; account: string | null };
-  knowledge: { links: Array<{ label: string; url: string }>; facts: string };
+  knowledge: {
+    links: Array<{ label: string; url: string }>;
+    facts: string;
+    contract: { address: string; chain: string; symbol: string } | null;
+  };
   counts: { posts: number; thoughts: number; pendingImpulses: number };
   cost: { usd: string; calls: number; cachePct: number };
   impulses: Array<{ id: number; body: string; status: string; createdAt: string }>;
@@ -35,6 +39,9 @@ export default function Admin() {
   // text under the operator's cursor.
   const [links, setLinks] = useState('');
   const [facts, setFacts] = useState('');
+  const [address, setAddress] = useState('');
+  const [chain, setChain] = useState('solana');
+  const [symbol, setSymbol] = useState('');
   const [knowledgeLoaded, setKnowledgeLoaded] = useState(false);
 
   useEffect(() => {
@@ -80,6 +87,9 @@ export default function Admin() {
     if (!state || knowledgeLoaded) return;
     setLinks(state.knowledge.links.map((l) => `${l.label} ${l.url}`).join('\n'));
     setFacts(state.knowledge.facts);
+    setAddress(state.knowledge.contract?.address ?? '');
+    setChain(state.knowledge.contract?.chain || 'solana');
+    setSymbol(state.knowledge.contract?.symbol ?? '');
     setKnowledgeLoaded(true);
   }, [state, knowledgeLoaded]);
 
@@ -97,6 +107,26 @@ export default function Admin() {
 
   const set = (key: string, value: unknown) =>
     act(() => call('/admin/settings', { method: 'POST', body: JSON.stringify({ key, value }) }));
+
+  // One payload for the whole of what he knows: the endpoint replaces the row, so sending
+  // only the section being edited would quietly erase the others.
+  const knowledgeBody = () => ({
+    links: links
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const at = line.lastIndexOf(' ');
+        return at === -1
+          ? { label: line, url: '' }
+          : { label: line.slice(0, at).trim(), url: line.slice(at + 1).trim() };
+      }),
+    facts,
+    contract: address.trim() ? { address: address.trim(), chain, symbol } : null,
+  });
+
+  const saveKnowledge = () =>
+    act(() => call('/admin/knowledge', { method: 'POST', body: JSON.stringify(knowledgeBody()) }));
 
   return (
     <div className="tank">
@@ -245,7 +275,65 @@ export default function Admin() {
                 </>
               )}
 
-              <p className="book">WHAT HE KNOWS</p>
+              <p className="book">SET CONTRACT ADDRESS</p>
+              <p className="hint">
+                The one value here that costs money when it is wrong. He is told to
+                reproduce it character for character, and any address in a draft that is not
+                exactly this one is refused before it can be published — including a
+                shortened 7Fq3…aK9 form, which looks authoritative and cannot be used.
+              </p>
+              <div className="entry">
+                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                  <span>
+                    <label className="dim" htmlFor="symbol">
+                      symbol{'\n'}
+                    </label>
+                    <input
+                      id="symbol"
+                      className="prompt-input"
+                      style={{ caretColor: 'var(--phosphor)', width: '10ch' }}
+                      placeholder="FISHNU"
+                      value={symbol}
+                      onChange={(e) => setSymbol(e.target.value)}
+                    />
+                  </span>
+                  <span>
+                    <label className="dim" htmlFor="chain">
+                      chain{'\n'}
+                    </label>
+                    <input
+                      id="chain"
+                      className="prompt-input"
+                      style={{ caretColor: 'var(--phosphor)', width: '12ch' }}
+                      value={chain}
+                      onChange={(e) => setChain(e.target.value)}
+                    />
+                  </span>
+                </div>
+                <label className="dim" htmlFor="address">
+                  {'\n'}address{'\n'}
+                </label>
+                <input
+                  id="address"
+                  className="prompt-input"
+                  style={{ caretColor: 'var(--phosphor)', width: '100%' }}
+                  placeholder="paste it, do not type it"
+                  spellCheck={false}
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                />
+                <span className="entry-meta">
+                  {address.trim()
+                    ? `${address.trim().length} characters — check the last four yourself: …${address.trim().slice(-4)}`
+                    : 'not set — he will refuse to produce any address at all'}
+                </span>
+                <button className="menu-item" disabled={busy} style={{ borderLeftColor: 'var(--bio)' }} onClick={saveKnowledge}>
+                  <span className="menu-key">↵</span>
+                  <span className="menu-name">SET CONTRACT</span>
+                </button>
+              </div>
+
+              <p className="book">SET LINKS</p>
               <p className="hint">
                 Fixed things: where the church lives, what the token is. He knows these and
                 does not advertise them — a link only appears when someone has asked where
@@ -282,25 +370,13 @@ export default function Admin() {
                     act(() =>
                       call('/admin/knowledge', {
                         method: 'POST',
-                        body: JSON.stringify({
-                          links: links
-                            .split('\n')
-                            .map((line) => line.trim())
-                            .filter(Boolean)
-                            .map((line) => {
-                              const at = line.lastIndexOf(' ');
-                              return at === -1
-                                ? { label: line, url: '' }
-                                : { label: line.slice(0, at).trim(), url: line.slice(at + 1).trim() };
-                            }),
-                          facts,
-                        }),
+                        body: JSON.stringify(knowledgeBody()),
                       }),
                     )
                   }
                 >
                   <span className="menu-key">↵</span>
-                  <span className="menu-name">TEACH</span>
+                  <span className="menu-name">SET LINKS</span>
                 </button>
               </div>
 

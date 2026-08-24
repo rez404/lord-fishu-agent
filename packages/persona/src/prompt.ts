@@ -31,7 +31,11 @@ export interface VolatileContext {
    */
   recentlySaid?: string[];
   /** Fixed things he knows about himself and the church. Operator-maintained. */
-  knowledge?: { links: Array<{ label: string; url: string }>; facts: string };
+  knowledge?: {
+    links: Array<{ label: string; url: string }>;
+    facts: string;
+    contract?: { address: string; chain: string; symbol: string } | null;
+  };
 }
 
 function renderLaw(): string {
@@ -167,7 +171,7 @@ ${ctx.situation}${knowledge}${said}`;
 }
 
 function renderKnowledge(k: VolatileContext['knowledge']): string {
-  if (!k || (k.links.length === 0 && !k.facts.trim())) return '';
+  if (!k || (k.links.length === 0 && !k.facts.trim() && !k.contract)) return '';
 
   const parts = ['\n\n# WHAT YOU KNOW'];
 
@@ -182,6 +186,19 @@ function renderKnowledge(k: VolatileContext['knowledge']): string {
         `answer to what was said — never appended to a thought, never as an invitation, ` +
         `never more than one at a time. A god who ends his sentences with a link is a ` +
         `marketing account wearing a costume, and everyone can tell.`,
+    );
+  }
+
+  if (k.contract) {
+    parts.push(
+      `The contract address${k.contract.symbol ? ` for ${k.contract.symbol}` : ''}${
+        k.contract.chain ? ` on ${k.contract.chain}` : ''
+      } is:\n\n  ${k.contract.address}\n\n` +
+        `If you give it, copy it exactly as written above, in full, every character. Never ` +
+        `shorten it, never write the first and last few characters with dots between, never ` +
+        `type it from memory, and never produce any other address for any reason. People act ` +
+        `on this with money. A wrong one costs them everything they send, and it would be ` +
+        `your fault. If you are not certain, say where to find it instead of giving it.`,
     );
   }
 

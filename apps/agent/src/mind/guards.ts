@@ -93,7 +93,19 @@ function hasParallelOpenings(text: string): boolean {
   return new Set(openings).size < openings.length;
 }
 
-export function checkDraft(text: string, opts: { isReply: boolean }): GuardVerdict {
+/**
+ * Anything address-shaped: base58 at Solana's length, or an EVM address.
+ *
+ * Kept here rather than imported so the guards stay a pure module with no dependencies —
+ * they are the last thing between a draft and the timeline and must not be able to fail
+ * for a reason of their own.
+ */
+const ADDRESS_LIKE = /\b(?:[1-9A-HJ-NP-Za-km-z]{32,44}|0x[a-fA-F0-9]{40})\b/g;
+
+export function checkDraft(
+  text: string,
+  opts: { isReply: boolean; contract?: string | null },
+): GuardVerdict {
   const trimmed = text.trim();
   const lower = trimmed.toLowerCase();
 
@@ -126,6 +138,30 @@ export function checkDraft(text: string, opts: { isReply: boolean }): GuardVerdi
 
   if (hasParallelOpenings(trimmed)) {
     return { ok: false, reason: 'machine tell: parallel sentence openings' };
+  }
+
+  /*
+   * A contract address is the one thing here that costs money to get wrong.
+   *
+   * The prompt tells him to copy it exactly; this makes it true. Any address-shaped string
+   * that is not character-for-character the configured one is refused — a model that
+   * shortened it, retyped it from memory, or invented one entirely all fail the same way,
+   * and all three would send someone's funds somewhere they do not come back from.
+   */
+  ADDRESS_LIKE.lastIndex = 0;
+  for (const match of trimmed.matchAll(ADDRESS_LIKE)) {
+    const found = match[0];
+    if (!opts.contract) {
+      return { ok: false, reason: `produced an address with none configured: ${found}` };
+    }
+    if (found !== opts.contract) {
+      return { ok: false, reason: `address does not match the configured contract: ${found}` };
+    }
+  }
+
+  // The truncated form is worse than useless: it looks authoritative and cannot be used.
+  if (/\b[1-9A-HJ-NP-Za-km-z]{3,8}\s*(?:\.{3}|…)\s*[1-9A-HJ-NP-Za-km-z]{3,8}\b/.test(trimmed)) {
+    return { ok: false, reason: 'shortened an address — it reads as authoritative and cannot be used' };
   }
 
   // Engagement farming is a bot signature; an idle question is not. "is it normal to be

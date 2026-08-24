@@ -1316,6 +1316,83 @@ async function main() {
     check('and a non-string fact does not become one', k.facts === '', JSON.stringify(k.facts));
   }
 
+  // ── 38. the contract address ───────────────────────────────────────────────
+  console.log('\ncontract address');
+  {
+    const real = '7Fq3nCmVvBqLkRzYtHwXsJ2dPgAe9rNuMkQvTbaK9xY';
+    const opts = { isReply: true, contract: real };
+
+    check('the real one passes', checkDraft(`it lives at ${real}`, opts).ok);
+    check(
+      'a different one does not',
+      checkDraft('it lives at 9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin', opts).ok === false,
+    );
+    check(
+      'one character off does not',
+      checkDraft(`it lives at ${real.slice(0, -1)}Z`, opts).ok === false,
+    );
+    check(
+      'the shortened form does not — it looks authoritative and cannot be used',
+      checkDraft('it lives at 7Fq3nCm…TbaK9xY', opts).ok === false,
+    );
+    check(
+      'an evm address does not',
+      checkDraft('it lives at 0x1234567890abcdef1234567890abcdef12345678', opts).ok === false,
+    );
+    check(
+      'with none configured he may not produce one at all',
+      checkDraft(`it lives at ${real}`, { isReply: true, contract: null }).ok === false,
+    );
+    check(
+      'and ordinary lines are unaffected',
+      checkDraft('the water is patient and it is not going anywhere', opts).ok,
+    );
+  }
+
+  // ── 39. a made-up address never reaches the timeline ───────────────────────
+  console.log('\ninvented address');
+  await reset();
+  {
+    await db.insert(settings).values({
+      key: 'knowledge',
+      value: {
+        links: [],
+        facts: '',
+        contract: { address: '7Fq3nCmVvBqLkRzYtHwXsJ2dPgAe9rNuMkQvTbaK9xY', chain: 'solana', symbol: 'FISHNU' },
+      },
+    });
+
+    const quota = new QuotaManager(db, env);
+    const cursors = new CursorStore(db);
+    // A model that hallucinates a plausible-looking address, and a critic that waves it
+    // through. This is the case the guard exists for.
+    const llm = new FakeLlmProvider((req) => {
+      if (req.task === 'triage') return 'YES';
+      if (req.task === 'critic') return 'PASS\nlooks fine';
+      return 'ca is 9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin';
+    });
+    const x = new FakeXClient([mention('1501', 'asker', 40_000)], quota);
+
+    const result = await runTick({
+      db, x, cursors, dryRun: false, minFollowers: 0,
+      postsPerDay: 0, sleepWindow: '', backroomsTurns: 0, mind: mind(llm),
+    });
+    check('nothing is published', x.published.length === 0 && result.replied === 0);
+
+    const [why] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(thoughts)
+      .where(sql`body like '%does not match the configured contract%'`);
+    check('and the reason names the mismatch', (why?.n ?? 0) >= 1, `got ${why?.n}`);
+
+    const voice = llm.requests.find((r) => r.task === 'voice')!;
+    check(
+      'he was told to copy it exactly',
+      voice.volatileSystem!.includes('copy it exactly as written above') &&
+        voice.volatileSystem!.includes('7Fq3nCmVvBqLkRzYtHwXsJ2dPgAe9rNuMkQvTbaK9xY'),
+    );
+  }
+
   await reset();
   await redis.quit();
 

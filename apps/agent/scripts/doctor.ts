@@ -119,7 +119,7 @@ async function main() {
   });
   spent += estimateCostUsd(draft);
 
-  const guard = checkDraft(draft.text, { isReply: true });
+  const guard = checkDraft(draft.text, { isReply: true, contract: null });
   console.log(`  "${draft.text}"\n`);
   console.log(`  guards:  ${guard.ok ? 'pass' : `FAIL — ${guard.reason}`}`);
 

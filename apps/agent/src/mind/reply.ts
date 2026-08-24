@@ -160,7 +160,7 @@ export async function composeReply(deps: ReplyDeps, c: ReplyCandidate): Promise<
   for (let attempt = 1; attempt <= 2; attempt++) {
     const text = await draft(deps, c, situation, knowledge);
 
-    const guard = checkDraft(text, { isReply: true });
+    const guard = checkDraft(text, { isReply: true, contract: knowledge.contract?.address ?? null });
     if (!guard.ok) {
       await think(db, 'deliberation', `discarded a draft — ${guard.reason}`, {
         mood,

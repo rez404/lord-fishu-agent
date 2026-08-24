@@ -116,7 +116,7 @@ export async function composePost(
 
     const text = result.text;
 
-    const guard = checkDraft(text, { isReply: false });
+    const guard = checkDraft(text, { isReply: false, contract: knowledge.contract?.address ?? null });
     if (!guard.ok) {
       await think(db, 'deliberation', `discarded a post — ${guard.reason}`, {
         mood,

@@ -16,6 +16,9 @@ import { actionLog, impulses, llmCalls, posts, settings, thoughts } from '@fishn
 
 const SETTABLE = new Set(['kill_switch', 'dry_run', 'reply_min_followers']);
 
+/** Base58 at Solana's length (no 0/O/I/l), or an EVM address. */
+const ADDRESS = /^(?:[1-9A-HJ-NP-Za-km-z]{32,44}|0x[a-fA-F0-9]{40})$/;
+
 export async function registerAdminRoutes(
   app: FastifyInstance,
   opts: { db: Db; token: string | null; wake?: () => void },
@@ -101,9 +104,10 @@ export async function registerAdminRoutes(
       cost: cost[0] ?? { usd: '0', calls: 0, cachePct: 0 },
       impulses: queue,
       recent,
-      knowledge: (flags.knowledge as { links?: unknown[]; facts?: string } | undefined) ?? {
+      knowledge: (flags.knowledge as { links?: unknown[]; facts?: string; contract?: unknown } | undefined) ?? {
         links: [],
         facts: '',
+        contract: null,
       },
     };
   });
@@ -112,10 +116,13 @@ export async function registerAdminRoutes(
    * The fixed things he knows. Links are validated here rather than trusted: a malformed
    * one would sit in his prompt as a fact about himself and come back out in public.
    */
-  app.post<{ Body: { links?: Array<{ label?: string; url?: string }>; facts?: string } }>(
-    '/admin/knowledge',
-    { preHandler: guard },
-    async (req, reply) => {
+  app.post<{
+    Body: {
+      links?: Array<{ label?: string; url?: string }>;
+      facts?: string;
+      contract?: { address?: string; chain?: string; symbol?: string } | null;
+    };
+  }>('/admin/knowledge', { preHandler: guard }, async (req, reply) => {
       const links: Array<{ label: string; url: string }> = [];
       for (const raw of req.body?.links ?? []) {
         const label = (raw?.label ?? '').trim();
@@ -131,17 +138,38 @@ export async function registerAdminRoutes(
         links.push({ label, url });
       }
 
-      const facts = (req.body?.facts ?? '').trim().slice(0, 4_000);
-      const value = { links, facts };
+    const facts = (req.body?.facts ?? '').trim().slice(0, 4_000);
 
-      await db
-        .insert(settings)
-        .values({ key: 'knowledge', value, updatedAt: new Date() })
-        .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: new Date() } });
+    /*
+     * The contract is checked hardest, because it is the only value here that costs money
+     * when it is wrong. A typo saved once is then repeated by an agent that has been told
+     * to reproduce it exactly — the mistake would be faithful and permanent.
+     */
+    let contract: { address: string; chain: string; symbol: string } | null = null;
+    const raw = req.body?.contract;
+    const address = (raw?.address ?? '').trim();
+    if (address) {
+      if (!ADDRESS.test(address)) {
+        return reply.code(400).send({
+          error: `that is not an address: ${address} — expected base58 (32-44) or 0x plus 40 hex`,
+        });
+      }
+      contract = {
+        address,
+        chain: (raw?.chain ?? '').trim().slice(0, 32),
+        symbol: (raw?.symbol ?? '').trim().slice(0, 16),
+      };
+    }
 
-      return { ok: true, knowledge: value };
-    },
-  );
+    const value = { links, facts, contract };
+
+    await db
+      .insert(settings)
+      .values({ key: 'knowledge', value, updatedAt: new Date() })
+      .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: new Date() } });
+
+    return { ok: true, knowledge: value };
+  });
 
   app.post<{ Body: { key?: string; value?: unknown } }>(
     '/admin/settings',
